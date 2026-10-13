@@ -141,10 +141,12 @@ button:disabled { cursor: default; opacity: .42; }
 @media (max-width: 680px) { .toolbar { flex-wrap: wrap; padding: 7px 10px; } .toolbar-divider { display: none; } .toolbar-meta, .status-pill { display: none; } .document-scroll { padding: 0; } .invoice-document { padding: 35px 24px 60px; } .document-heading h1 { font-size: 44px; } .parties-grid, .totals-section { grid-template-columns: 1fr; gap: 28px; } .line-headings, .line-row { grid-template-columns: minmax(0, 1fr) 44px 78px 88px 20px; gap: 10px; } .totals-list { width: 100%; } .modal-grid, .documents-filters { grid-template-columns: 1fr; } .setup-actions { flex-direction: column; } .setup-actions button { width: 100%; } }
 
 @media print {
-  @page { size: A4; margin: 0; }
+  @page { size: A4; margin: 18mm; }
   body { background: white; }
   .toolbar, .document-scroll, .status-bar, .modal-backdrop { display: none !important; }
   .export-pages { display: block; }
-  .export-page { width: auto; min-height: 297mm; margin: 0; padding: 22mm 18mm; }
-  .export-page:last-child { page-break-after: auto; }
+  .export-page { width: auto; min-height: 0; margin: 0; padding: 0; break-after: page; page-break-after: always; }
+  .export-page + .export-page { break-before: page; page-break-before: always; }
+  .export-page:last-child { break-after: auto; page-break-after: auto; }
+  .terms-section { break-inside: avoid; page-break-inside: avoid; }
 }
