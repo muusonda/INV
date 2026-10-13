@@ -57,6 +57,7 @@ private func csvEscape(_ value: String) -> String {
 // Configure them in the app before issuing an invoice.
 private let invDefaultBankingDetails = ""
 private let invLegacyBankingDetails = ""
+private let invPDFExportMargin: CGFloat = 48
 
 
 // MARK: - Draft models
@@ -3156,12 +3157,19 @@ struct FlatInvoiceDocument: View {
             terms
         }
         .padding(
-            EdgeInsets(
-                top: 54,
-                leading: 58,
-                bottom: 80,
-                trailing: 58
-            )
+            isExporting
+                ? EdgeInsets(
+                    top: invPDFExportMargin,
+                    leading: invPDFExportMargin,
+                    bottom: invPDFExportMargin,
+                    trailing: invPDFExportMargin
+                )
+                : EdgeInsets(
+                    top: 54,
+                    leading: 58,
+                    bottom: 80,
+                    trailing: 58
+                )
         )
         .frame(
             maxWidth: .infinity,
@@ -4705,11 +4713,11 @@ struct GrowingDescriptionField: View {
                             )
                     }
 
-                    TextEditor(text: $text)
-                        .font(.system(size: 13))
-                        .foregroundColor(invInk)
-                        .invTransparentEditorBackground()
-                        .background(Color.clear)
+                    GrowingDescriptionTextView(
+                        text: $text,
+                        measuredHeight: $measuredHeight
+                    )
+                    .background(Color.clear)
                 }
                 .frame(
                     height: max(measuredHeight, 48)
@@ -5676,7 +5684,8 @@ enum PDFExporter {
         let onePageScale = min(
             widthScale,
             (
-                pageSize.height - 2
+                pageSize.height
+                    - (invPDFExportMargin * 2)
             ) / naturalHeight
         )
 
@@ -5687,6 +5696,8 @@ enum PDFExporter {
                     naturalHeight,
                 scale:
                     onePageScale,
+                topMargin:
+                    invPDFExportMargin,
                 paper:
                     paper
             ) else {
@@ -5800,6 +5811,7 @@ enum PDFExporter {
         _ view: Content,
         naturalHeight: CGFloat,
         scale: CGFloat,
+        topMargin: CGFloat,
         paper: Color
     ) -> PDFPage? {
         let renderedWidth =
@@ -5829,7 +5841,8 @@ enum PDFExporter {
                     anchor: .topLeading
                 )
                 .offset(
-                    x: horizontalOffset
+                    x: horizontalOffset,
+                    y: topMargin
                 )
         }
         .frame(
@@ -6558,7 +6571,7 @@ struct PrintablePageOne: View {
                 .font(.system(size: 9))
                 .frame(maxWidth: .infinity)
         }
-        .padding(42)
+        .padding(invPDFExportMargin)
         .foregroundColor(.black)
     }
 }
@@ -6730,7 +6743,7 @@ struct PrintablePageTwo: View {
                     maxWidth: .infinity
                 )
         }
-        .padding(42)
+        .padding(invPDFExportMargin)
         .foregroundColor(.black)
     }
 }
