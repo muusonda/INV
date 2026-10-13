@@ -1,0 +1,32 @@
+.DS_Store
+
+# Compiled app binaries and transient build output
+Build/*
+!Build/Info.plist
+!Build/INV.icns
+!Build/MakeIcon.swift
+
+# Historical recovery copies and experimental source snapshots
+Sources/*.backup-*
+Sources/*.broken-*
+Sources/*-candidate.swift
+Sources/INV.before-*.swift
+Build/*.backup-*
+Build/*.log
+Build/*-candidate.swift
+
+# Local invoice/export data
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+exports/
+data/
+
+# Local configuration and invoice exchange files
+.env
+.env.*
+*.pdf
+*.csv
+*.json
+*.txt
+
