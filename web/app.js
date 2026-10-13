@@ -4,10 +4,15 @@ const LEGACY_PROFILE_KEY = "inv.web.books.profile.v1";
 const TESSERACT_URL = "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";
 const PDFJS_URL = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs";
 const PDFJS_WORKER_URL = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs";
+const HTML2CANVAS_URL = "https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js";
+const PDF_LIB_URL = "https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js";
 const MAX_OCR_PAGES = 12;
 
 let tesseractPromise = null;
 let pdfjsPromise = null;
+let html2canvasPromise = null;
+let pdfLibPromise = null;
+let isExporting = false;
 const PDF_JS_WORKER = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 const TESSERACT_WORKER = "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/worker.min.js";
 const TESSERACT_CORE = "https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.0";
@@ -291,6 +296,125 @@ function renderExportPages() {
   const container = $("export-pages");
   if (!container) return;
   container.innerHTML = stages(invoice).map((stage) => exportPage(invoice, stage)).join("");
+}
+
+function loadScriptOnce(url, globalName) {
+  if (window[globalName]) return Promise.resolve(window[globalName]);
+  const existing = document.querySelector(`script[data-inv-library="${url}"]`);
+  if (existing) {
+    return new Promise((resolve, reject) => {
+      existing.addEventListener("load", () => resolve(window[globalName]), { once: true });
+      existing.addEventListener("error", () => reject(new Error(`Could not load ${globalName}.`)), { once: true });
+    });
+  }
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = url;
+    script.async = true;
+    script.dataset.invLibrary = url;
+    script.onload = () => window[globalName] ? resolve(window[globalName]) : reject(new Error(`${globalName} is unavailable.`));
+    script.onerror = () => reject(new Error(`Could not load ${globalName}.`));
+    document.head.appendChild(script);
+  });
+}
+
+function loadHTML2Canvas() {
+  if (!html2canvasPromise) html2canvasPromise = loadScriptOnce(HTML2CANVAS_URL, "html2canvas");
+  return html2canvasPromise;
+}
+
+function loadPDFLib() {
+  if (!pdfLibPromise) pdfLibPromise = loadScriptOnce(PDF_LIB_URL, "PDFLib");
+  return pdfLibPromise;
+}
+
+function safeExportName() {
+  const raw = invoice.documentNumber || (invoice.documentType === "QUOTE" ? "QUOTE-Draft" : "INV-Draft");
+  return raw.replace(/[^a-z0-9._-]+/gi, "-").replace(/^-+|-+$/g, "") || "INV-Draft";
+}
+
+async function exportCleanPDF() {
+  const [html2canvas, PDFLib] = await Promise.all([loadHTML2Canvas(), loadPDFLib()]);
+  if (document.fonts?.ready) await document.fonts.ready;
+
+  const container = $("export-pages");
+  if (!container) throw new Error("The export pages are unavailable.");
+  const previous = {
+    display: container.style.display,
+    position: container.style.position,
+    left: container.style.left,
+    top: container.style.top,
+    width: container.style.width,
+    zIndex: container.style.zIndex
+  };
+
+  container.style.display = "block";
+  container.style.position = "fixed";
+  container.style.left = "-10000px";
+  container.style.top = "0";
+  container.style.width = "760px";
+  container.style.zIndex = "-1";
+
+  try {
+    const pages = [...container.querySelectorAll(".export-page")];
+    if (!pages.length) throw new Error("There is nothing to export.");
+
+    const pdf = await PDFLib.PDFDocument.create();
+    const pageWidth = 595.28;
+    const pageHeight = 841.89;
+    const margin = 18 * 72 / 25.4;
+
+    for (const pageElement of pages) {
+      const canvas = await html2canvas(pageElement, {
+        backgroundColor: "#ffffff",
+        scale: Math.min(window.devicePixelRatio || 1, 2),
+        useCORS: true,
+        logging: false
+      });
+      const image = await pdf.embedPng(canvas.toDataURL("image/png"));
+      const availableWidth = pageWidth - margin * 2;
+      const availableHeight = pageHeight - margin * 2;
+      const scale = Math.min(availableWidth / image.width, availableHeight / image.height);
+      const width = image.width * scale;
+      const height = image.height * scale;
+      const page = pdf.addPage([pageWidth, pageHeight]);
+      page.drawImage(image, {
+        x: (pageWidth - width) / 2,
+        y: pageHeight - margin - height,
+        width,
+        height
+      });
+    }
+
+    const bytes = await pdf.save();
+    const blobURL = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+    const link = document.createElement("a");
+    link.href = blobURL;
+    link.download = `${safeExportName()}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(blobURL), 1000);
+  } finally {
+    Object.entries(previous).forEach(([key, value]) => { container.style[key] = value; });
+  }
+}
+
+async function startExport() {
+  if (isExporting) return;
+  isExporting = true;
+  renderExportPages();
+  setStatus("Preparing clean PDF…");
+  try {
+    await exportCleanPDF();
+    setStatus("PDF downloaded without browser headers or footers");
+  } catch (error) {
+    console.error(error);
+    setStatus("Clean PDF unavailable. In the print dialog, turn off Headers and footers.");
+    window.print();
+  } finally {
+    isExporting = false;
+  }
 }
 
 function renderDocument() {
@@ -845,14 +969,14 @@ function handleShortcuts(event) {
   if (key === "s") { event.preventDefault(); saveInvoice(); }
   if (key === "n") { event.preventDefault(); saveNewDocument(event.shiftKey ? "QUOTE" : "INVOICE"); }
   if (key === "o") { event.preventDefault(); renderDocuments(); openModal("documents-modal"); }
-  if (key === "e" && event.shiftKey) { event.preventDefault(); window.print(); }
+  if (key === "e" && event.shiftKey) { event.preventDefault(); startExport(); }
 }
 
 $("new-invoice").onclick = () => saveNewDocument("INVOICE");
 $("documents-button").onclick = () => { renderDocuments(); openModal("documents-modal"); };
 $("save-invoice").onclick = saveInvoice;
 $("issue-invoice").onclick = issueInvoice;
-$("export-invoice").onclick = () => { renderExportPages(); setStatus("Use the print dialog to choose Save as PDF."); window.print(); };
+$("export-invoice").onclick = startExport;
 $("payment-button").onclick = openPayment;
 $("setup-button").onclick = () => { renderSetup(); openModal("setup-modal"); };
 $("add-line").onclick = () => { invoice.lines.push(blankLine()); markDirty(); renderLines(); updateDerived(); };
