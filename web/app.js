@@ -141,7 +141,7 @@ function dueText(stage) {
 
 function currentTitle() {
   if (invoice.documentType === "QUOTE") return "QUOTE";
-  if (booksProfile.vatNumber.trim()) return "TAX INVOICE";
+  if (String(booksProfile.vatNumber || "").trim()) return "TAX INVOICE";
   return "INVOICE";
 }
 
@@ -323,6 +323,7 @@ function issueInvoice() {
   invoice.status = "Issued";
   markDirty();
   persistInvoice(false);
+  updateDerived();
   setStatus("Issued and saved to Books");
 }
 
