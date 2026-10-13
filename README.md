@@ -2,7 +2,7 @@
 
 INV is a native macOS invoice application for creating, editing, importing, and exporting invoices.
 
-The `web/` directory is a no-login browser version published on GitHub Pages. It keeps saved invoices in the browser's local storage and uses the browser print dialog to create a PDF, so no invoice data is sent to an INV server. **Documents** is the browser-local history, while **Setup** stores optional company/VAT details for new invoices. Setup also provides **Download editable backup** (a JSON backup that can be restored through Import) and **Clear local data**. PDF and image imports use PDF.js and Tesseract.js in the browser to create an editable draft; the first OCR run downloads the open-source OCR assets and English language data from their CDNs, but the invoice file itself is not uploaded.
+The `web/` directory is a no-login browser version published on GitHub Pages. It keeps saved invoices in the browser's local storage and creates clean white-background PDFs directly in the browser, so browser-added URL, date, and page-title headers are not included and no invoice data is sent to an INV server. **Documents** is the browser-local history, while **Setup** stores optional company/VAT details for new invoices. Setup also provides **Download editable backup** (a JSON backup that can be restored through Import) and **Clear local data**. PDF and image imports use PDF.js and Tesseract.js in the browser to create an editable draft; the first OCR run downloads the open-source OCR assets and English language data from their CDNs, but the invoice file itself is not uploaded.
 
 ## Source layout
 
