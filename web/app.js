@@ -1,5 +1,6 @@
 const STORAGE_KEY = "inv.web.invoices.v1";
-const PROFILE_KEY = "inv.web.books.profile.v1";
+const PROFILE_KEY = "inv.web.setup.profile.v1";
+const LEGACY_PROFILE_KEY = "inv.web.books.profile.v1";
 const TESSERACT_URL = "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";
 const PDFJS_URL = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs";
 const PDFJS_WORKER_URL = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs";
@@ -34,7 +35,7 @@ function blankInvoice() {
     id: makeId(), documentType: "INVOICE", documentNumber: "", status: "Draft",
     issueDate: today(), dueDate: afterDays(7), dueDateMode: "Specific date",
     finalDueDate: afterDays(21), finalDueDateMode: "On delivery", paymentPlan: "Single", paymentStage: "",
-    senderName: "", senderAddress: "", clientName: "", clientContact: "", clientAddress: "",
+    senderName: "", senderAddress: "", senderVatNumber: "", clientName: "", clientContact: "", clientAddress: "",
     projectName: "", projectDescription: "", lines: [blankLine()], currency: "ZAR", taxRate: 0,
     paymentTerms: "", bankingDetails: "", amountPaid: 0, payments: []
   };
@@ -53,6 +54,7 @@ function normalizeInvoice(raw = {}) {
     status: raw.status || "Draft",
     senderName: raw.senderName ?? sender.name ?? "",
     senderAddress: raw.senderAddress ?? sender.address ?? [sender.email, sender.phone].filter(Boolean).join("\n"),
+    senderVatNumber: String(raw.senderVatNumber ?? sender.vatNumber ?? ""),
     clientName: raw.clientName ?? client.name ?? "",
     clientContact: raw.clientContact ?? client.contact ?? "",
     clientAddress: raw.clientAddress ?? client.address ?? [client.email, client.phone].filter(Boolean).join("\n"),
@@ -84,21 +86,25 @@ function readSavedInvoices() {
 }
 
 function readProfile() {
-  try { return { legalName: "", vatNumber: "", address: "", ...JSON.parse(localStorage.getItem(PROFILE_KEY) || "{}") }; }
+  try {
+    const saved = localStorage.getItem(PROFILE_KEY) || localStorage.getItem(LEGACY_PROFILE_KEY) || "{}";
+    return { legalName: "", vatNumber: "", address: "", ...JSON.parse(saved) };
+  }
   catch { return { legalName: "", vatNumber: "", address: "" }; }
 }
 
 let invoice = normalizeInvoice();
 let savedInvoices = readSavedInvoices();
-let booksProfile = readProfile();
+let setupProfile = readProfile();
 let hasUnsavedChanges = false;
 let autosaveTimer = null;
+let importGeneration = 0;
 
 const FIELD_PATHS = {
   "document-number": "documentNumber", "issue-date": "issueDate", "due-date": "dueDate",
   "due-date-mode": "dueDateMode", "final-due-date": "finalDueDate", "final-due-date-mode": "finalDueDateMode",
   "payment-plan": "paymentPlan", "payment-stage": "paymentStage", currency: "currency", "tax-rate": "taxRate",
-  "sender-name": "senderName", "sender-address": "senderAddress", "client-name": "clientName",
+  "sender-name": "senderName", "sender-address": "senderAddress", "sender-vat-number": "senderVatNumber", "client-name": "clientName",
   "client-contact": "clientContact", "client-address": "clientAddress", "project-name": "projectName",
   "project-description": "projectDescription", "payment-terms": "paymentTerms", "banking-details": "bankingDetails"
 };
@@ -150,9 +156,9 @@ function dueText(stage) {
   return stage.due || "";
 }
 
-function currentTitle() {
-  if (invoice.documentType === "QUOTE") return "QUOTE";
-  if (String(booksProfile.vatNumber || "").trim()) return "TAX INVOICE";
+function currentTitle(draft = invoice) {
+  if (draft.documentType === "QUOTE") return "QUOTE";
+  if (String(draft.senderVatNumber || "").trim()) return "TAX INVOICE";
   return "INVOICE";
 }
 
@@ -198,10 +204,9 @@ function persistInvoice(silent = false) {
   $("status-icon").classList.remove("unsaved");
   $("unsaved-label").textContent = "";
   $("save-invoice").innerHTML = `<span>⇩</span><span>${invoice.status === "Draft" ? "Save" : "Save Changes"}</span>`;
-  if (!silent) { $("saved-label")?.remove(); setStatus(invoice.status === "Draft" ? "Saved" : "Saved and Books updated"); }
+  if (!silent) { $("saved-label")?.remove(); setStatus("Saved in this browser"); }
   renderDocuments();
   renderClientList();
-  renderBooks();
 }
 
 function saveInvoice() {
@@ -255,7 +260,6 @@ function updateDerived() {
   $("payment-button").disabled = invoice.status === "Draft" || paid + 0.005 >= result.total;
   $("save-invoice").innerHTML = `<span>⇩</span><span>${invoice.status === "Draft" ? "Save" : "Save Changes"}</span>`;
   renderExportPages();
-  renderBooks();
 }
 
 function renderClientList() {
@@ -273,9 +277,9 @@ function exportPage(draft, stage) {
   ].filter(Boolean).join("\n");
   const rows = draft.lines.map((line) => `<tr><td>${escapeHTML(line.itemDescription || "Item")}</td><td>${escapeHTML(line.quantity)}</td><td>${escapeHTML(money(line.rate, draft.currency))}</td><td>${escapeHTML(money(line.quantity * line.rate * stage.fraction, draft.currency))}</td></tr>`).join("");
   return `<article class="export-page">
-    <section class="document-heading"><div class="heading-meta"><span class="paper-label">STATUS</span><span class="paper-status">${escapeHTML(draft.status.toUpperCase())}</span><span class="paper-label">DOCUMENT NUMBER</span><span class="paper-input small-input">${escapeHTML(draft.documentNumber || "")}</span></div><h1>${escapeHTML(currentTitle())}</h1></section>
+    <section class="document-heading"><div class="heading-meta"><span class="paper-label">STATUS</span><span class="paper-status">${escapeHTML(draft.status.toUpperCase())}</span><span class="paper-label">DOCUMENT NUMBER</span><span class="paper-input small-input">${escapeHTML(draft.documentNumber || "")}</span></div><h1>${escapeHTML(currentTitle(draft))}</h1></section>
     <section class="schedule-row"><div class="paper-field"><span class="paper-label">ISSUE DATE</span><span class="paper-input">${escapeHTML(draft.issueDate)}</span></div><div class="paper-field"><span class="paper-label">PAYMENT SCHEDULE</span><span class="paper-input">${escapeHTML(draft.paymentPlan)} · ${escapeHTML(dueText(stage))}</span></div><div class="paper-field"><span class="paper-label">PAYMENT STAGE</span><span class="paper-input">${escapeHTML(draft.paymentStage || stage.label)}</span></div><div class="paper-field"><span class="paper-label">CURRENCY</span><span class="paper-input">${escapeHTML(draft.currency)}</span></div></section>
-    <section class="document-section parties-grid"><div class="party-column"><h2 class="section-label">FROM</h2><span class="paper-label">NAME</span><span class="paper-input">${escapeHTML(draft.senderName)}</span><p class="paper-textarea">${multiline(draft.senderAddress)}</p></div><div class="party-column"><h2 class="section-label">BILL TO</h2><span class="paper-label">CLIENT</span><span class="paper-input">${escapeHTML(draft.clientName)}</span><span class="paper-label">ATTENTION</span><span class="paper-input">${escapeHTML(draft.clientContact)}</span><p class="paper-textarea">${multiline(draft.clientAddress)}</p></div></section>
+    <section class="document-section parties-grid"><div class="party-column"><h2 class="section-label">FROM</h2><span class="paper-label">NAME</span><span class="paper-input">${escapeHTML(draft.senderName)}</span><p class="paper-textarea">${multiline(draft.senderAddress)}</p>${draft.senderVatNumber ? `<p class="paper-label">VAT number: ${escapeHTML(draft.senderVatNumber)}</p>` : ""}</div><div class="party-column"><h2 class="section-label">BILL TO</h2><span class="paper-label">CLIENT</span><span class="paper-input">${escapeHTML(draft.clientName)}</span><span class="paper-label">ATTENTION</span><span class="paper-input">${escapeHTML(draft.clientContact)}</span><p class="paper-textarea">${multiline(draft.clientAddress)}</p></div></section>
     <section class="document-section"><h2 class="section-label">PROJECT</h2><span class="paper-label">PROJECT NAME</span><span class="paper-input">${escapeHTML(draft.projectName)}</span><p class="paper-textarea">${multiline(draft.projectDescription)}</p></section>
     <section class="document-section line-items-section"><div class="line-headings"><span>DESCRIPTION</span><span>QTY</span><span>RATE</span><span>AMOUNT</span><span></span></div><div>${rows}</div></section>
     <section class="document-section totals-section"><div></div><div class="totals-list"><div class="amount-row"><span>SUBTOTAL</span><strong>${escapeHTML(money(result.subtotal * stage.fraction, draft.currency))}</strong></div><div class="amount-row"><span>VAT</span><strong>${draft.taxRate > 0 ? escapeHTML(money(result.tax * stage.fraction, draft.currency)) : "N/A"}</strong></div><hr><div class="amount-row total-row"><span>TOTAL</span><strong>${escapeHTML(money(amount, draft.currency))}</strong></div></div></section>
@@ -297,7 +301,10 @@ function renderDocument() {
 }
 
 function saveNewDocument(type = "INVOICE") {
+  if (hasUnsavedChanges) persistInvoice(true);
+  clearTimeout(autosaveTimer);
   invoice = blankInvoice();
+  applySetupToInvoice();
   invoice.documentType = type;
   hasUnsavedChanges = false;
   $("status-icon").classList.remove("unsaved");
@@ -335,10 +342,12 @@ function issueInvoice() {
   markDirty();
   persistInvoice(false);
   updateDerived();
-  setStatus("Issued and saved to Books");
+  setStatus("Issued and saved");
 }
 
 function loadInvoice(id) {
+  if (hasUnsavedChanges) persistInvoice(true);
+  clearTimeout(autosaveTimer);
   const found = savedInvoices.find((saved) => saved.id === id);
   if (!found) return;
   invoice = normalizeInvoice(JSON.parse(JSON.stringify(found)));
@@ -353,7 +362,7 @@ function deleteInvoice(id) {
   if (!found || !window.confirm(`Delete ${found.documentNumber || "this document"}?`)) return;
   savedInvoices = savedInvoices.filter((saved) => saved.id !== id);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(savedInvoices));
-  renderDocuments(); renderClientList(); renderBooks(); setStatus("Document deleted");
+  renderDocuments(); renderClientList(); renderSetup(); setStatus("Document deleted");
 }
 
 function displayStatus(saved) {
@@ -644,11 +653,19 @@ function importOcrResult(text, fileName = "") {
 }
 
 function importText(text, fileName = "") {
+  let parsed;
   try {
-    const parsed = JSON.parse(text);
+    parsed = JSON.parse(text);
+  } catch { /* Continue with labelled text parsing. */ }
+  if (parsed && (parsed.format || parsed.invoices)) {
+    restoreBackup(parsed);
+    return;
+  }
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
     invoice = normalizeInvoice({ ...parsed, status: "Draft", amountPaid: 0, payments: [] });
     renderDocument(); markDirty(); setStatus("Invoice imported and editable. Review every field before issuing."); return;
-  } catch { /* Continue with labelled text parsing. */ }
+  }
+  if (/\.json$/i.test(fileName)) { setStatus("This JSON file is not a valid invoice or INV backup."); return; }
   const pick = (label) => text.match(new RegExp(`^\\s*${label}\\s*:\\s*(.+)$`, "im"))?.[1]?.trim() || "";
   const next = blankInvoice();
   next.documentNumber = pick("(?:invoice|document)\\s*(?:number|no\\.)?");
@@ -661,11 +678,12 @@ function importText(text, fileName = "") {
   invoice = next; renderDocument(); markDirty(); setStatus("Invoice text imported. Review the converted fields before issuing.");
 }
 
-async function importVisualFile(file) {
+async function importVisualFile(file, generation) {
   setStatus("Starting local OCR…");
   const text = file.type === "application/pdf" || /\.pdf$/i.test(file.name)
     ? await recognizePDF(file)
     : await recognizeImage(file);
+  if (generation !== importGeneration) return;
   if (!text.trim()) throw new Error("No readable text was found in the uploaded file.");
   invoice = parseOCRInvoice(text, file.name);
   renderDocument(); markDirty();
@@ -675,11 +693,15 @@ async function importVisualFile(file) {
 async function importFile(event) {
   const file = event.target.files[0];
   if (!file) return;
+  if (hasUnsavedChanges) persistInvoice(true);
+  clearTimeout(autosaveTimer);
+  const generation = ++importGeneration;
   if (/\.pdf$/i.test(file.name) || file.type === "application/pdf" || file.type.startsWith("image/")) {
-    try { await importVisualFile(file); }
-    catch (error) { setStatus(error?.message || "OCR could not read this file. You can still enter the invoice manually."); }
+    try { await importVisualFile(file, generation); }
+    catch (error) { if (generation === importGeneration) setStatus(error?.message || "OCR could not read this file. You can still enter the invoice manually."); }
   } else {
-    file.text().then((text) => importText(text, file.name)).catch(() => setStatus("The selected file could not be opened."));
+    try { const text = await file.text(); if (generation === importGeneration) importText(text, file.name); }
+    catch { if (generation === importGeneration) setStatus("The selected file could not be opened."); }
   }
   event.target.value = "";
 }
@@ -703,24 +725,118 @@ function savePayment() {
   invoice.amountPaid = invoice.payments.reduce((sum, payment) => sum + (payment.type === "Refund" ? -(Number(payment.amount) || 0) : (Number(payment.amount) || 0)), 0);
   const result = totals(invoice);
   invoice.status = invoice.amountPaid + .005 >= result.total ? "Paid" : "Partially Paid";
-  closeModal("payment-modal"); markDirty(); persistInvoice(false); renderDocument(); setStatus("Payment saved and Books updated");
+  closeModal("payment-modal"); markDirty(); persistInvoice(false); renderDocument(); setStatus("Payment saved");
 }
 
-function renderBooks() {
-  const outstanding = savedInvoices.reduce((sum, saved) => sum + Math.max(totals(saved).total - (Number(saved.amountPaid) || 0), 0), 0);
-  const paid = savedInvoices.reduce((sum, saved) => sum + (Number(saved.amountPaid) || 0), 0);
-  $("books-outstanding").textContent = money(outstanding);
-  $("books-invoices").textContent = String(savedInvoices.length);
-  $("books-paid").textContent = money(paid);
-  $("books-company-name").value = booksProfile.legalName || invoice.senderName || "";
-  $("books-vat-number").value = booksProfile.vatNumber || "";
-  $("books-company-address").value = booksProfile.address || invoice.senderAddress || "";
+function renderSetup() {
+  $("setup-company-name").value = setupProfile.legalName || "";
+  $("setup-vat-number").value = setupProfile.vatNumber || "";
+  $("setup-company-address").value = setupProfile.address || "";
 }
 
-function saveBooksProfile() {
-  booksProfile = { legalName: $("books-company-name").value, vatNumber: $("books-vat-number").value, address: $("books-company-address").value };
-  localStorage.setItem(PROFILE_KEY, JSON.stringify(booksProfile));
-  closeModal("books-modal"); updateDerived(); setStatus("Books company details saved");
+function applySetupToInvoice() {
+  invoice.senderName = setupProfile.legalName;
+  invoice.senderAddress = setupProfile.address;
+  invoice.senderVatNumber = setupProfile.vatNumber;
+}
+
+function saveSetupProfile() {
+  const previousProfile = setupProfile;
+  const nextProfile = {
+    legalName: $("setup-company-name").value.trim(),
+    vatNumber: $("setup-vat-number").value.trim(),
+    address: $("setup-company-address").value.trim()
+  };
+  try { localStorage.setItem(PROFILE_KEY, JSON.stringify(nextProfile)); }
+  catch { setStatus("This browser could not save company details. Download a backup before leaving."); return; }
+  // Existing documents keep their own sender details; only populate an empty draft.
+  const emptySender = invoice.status === "Draft" && (!invoice.senderName && !invoice.senderAddress && !invoice.senderVatNumber
+    || (invoice.senderName === previousProfile.legalName && invoice.senderAddress === previousProfile.address && invoice.senderVatNumber === previousProfile.vatNumber));
+  setupProfile = nextProfile;
+  if (emptySender) { applySetupToInvoice(); markDirty(); }
+  closeModal("setup-modal"); renderDocument(); setStatus("Company details saved for new invoices");
+}
+
+function downloadBackup() {
+  const current = normalizeInvoice(JSON.parse(JSON.stringify(invoice)));
+  const backupInvoices = savedInvoices.filter((saved) => saved.id !== current.id).concat(current);
+  const payload = {
+    format: "INV editable backup",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    currentInvoiceId: invoice.id,
+    profile: setupProfile,
+    invoices: backupInvoices
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `INV-backup-${today()}.json`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  setStatus("Editable backup downloaded");
+}
+
+function restoreBackup(payload) {
+  if (payload.format !== "INV editable backup" || payload.version !== 1 || !Array.isArray(payload.invoices)
+      || !payload.invoices.every((item) => item && typeof item === "object" && !Array.isArray(item)
+        && Array.isArray(item.lines) && item.lines.every((line) => line && typeof line === "object"))
+      || !payload.profile || typeof payload.profile !== "object" || Array.isArray(payload.profile)) {
+    setStatus("This is not a supported INV editable backup. Your Documents have not changed."); return;
+  }
+  const profile = {
+    legalName: String(payload.profile.legalName || ""),
+    vatNumber: String(payload.profile.vatNumber || ""),
+    address: String(payload.profile.address || "")
+  };
+  const merged = savedInvoices.slice();
+  let selected;
+  for (const raw of payload.invoices) {
+    const restored = normalizeInvoice(raw);
+    const existing = merged.find((item) => item.id === restored.id);
+    if (existing && JSON.stringify(existing) !== JSON.stringify(restored)) restored.id = makeId();
+    if (!existing || existing.id !== restored.id) merged.push(restored);
+    if (raw.id === payload.currentInvoiceId || !selected) selected = restored;
+  }
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(merged)); }
+  catch { setStatus("The backup could not be restored: browser storage is full or unavailable."); return; }
+  savedInvoices = merged;
+  setupProfile = profile;
+  let profileSaved = true;
+  try { localStorage.setItem(PROFILE_KEY, JSON.stringify(profile)); } catch { profileSaved = false; }
+  clearTimeout(autosaveTimer);
+  hasUnsavedChanges = false;
+  $("status-icon").classList.remove("unsaved");
+  $("unsaved-label").textContent = "";
+  invoice = selected || blankInvoice();
+  if (!selected) applySetupToInvoice();
+  renderDocument(); renderDocuments();
+  setStatus(profileSaved ? "Backup restored. Existing Documents were kept; different versions are separate copies." : "Documents restored, but company details could not be saved. Keep your backup.");
+}
+
+function clearLocalData() {
+  if (!window.confirm("Clear all INV invoices, the current draft and company details from this browser? Download an editable backup first if you need them. This cannot be undone.")) return;
+  clearTimeout(autosaveTimer);
+  importGeneration += 1;
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(PROFILE_KEY);
+    localStorage.removeItem(LEGACY_PROFILE_KEY);
+  } catch { setStatus("This browser could not clear local data. Use your browser's site-data settings."); return; }
+  savedInvoices = [];
+  setupProfile = { legalName: "", vatNumber: "", address: "" };
+  invoice = normalizeInvoice();
+  hasUnsavedChanges = false;
+  $("status-icon").classList.remove("unsaved");
+  $("unsaved-label").textContent = "";
+  $("document-search").value = "";
+  $("status-filter").value = "All";
+  closeModal("setup-modal");
+  renderDocument(); renderDocuments();
+  setStatus("Local data cleared");
 }
 
 function handleShortcuts(event) {
@@ -738,11 +854,13 @@ $("save-invoice").onclick = saveInvoice;
 $("issue-invoice").onclick = issueInvoice;
 $("export-invoice").onclick = () => { renderExportPages(); setStatus("Use the print dialog to choose Save as PDF."); window.print(); };
 $("payment-button").onclick = openPayment;
-$("books-button").onclick = () => { renderBooks(); openModal("books-modal"); };
+$("setup-button").onclick = () => { renderSetup(); openModal("setup-modal"); };
 $("add-line").onclick = () => { invoice.lines.push(blankLine()); markDirty(); renderLines(); updateDerived(); };
 $("import-file").onchange = importFile;
 $("save-payment").onclick = savePayment;
-$("save-books-profile").onclick = saveBooksProfile;
+$("save-setup-profile").onclick = saveSetupProfile;
+$("download-backup").onclick = downloadBackup;
+$("clear-local-data").onclick = clearLocalData;
 $("document-search").oninput = renderDocuments;
 $("status-filter").onchange = renderDocuments;
 document.querySelectorAll("[data-close-modal]").forEach((button) => button.addEventListener("click", () => closeModal(button.dataset.closeModal)));
@@ -751,4 +869,5 @@ document.addEventListener("keydown", handleShortcuts);
 window.addEventListener("beforeunload", () => { if (hasUnsavedChanges) persistInvoice(true); });
 
 bindFields();
+applySetupToInvoice();
 renderDocument();

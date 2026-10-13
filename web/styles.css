@@ -124,28 +124,20 @@ button:disabled { cursor: default; opacity: .42; }
 .modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding-top: 18px; }
 .payment-modal { width: min(520px, 100%); }
 .modal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-.modal-grid label, .books-card label { display: grid; gap: 5px; color: var(--muted); font-size: 12px; }
+.modal-grid label { display: grid; gap: 5px; color: var(--muted); font-size: 12px; }
 .full-span { grid-column: 1 / -1; }
-.books-modal { width: min(1020px, 100%); min-height: min(700px, 92vh); }
-.books-eyebrow { margin: 0 0 4px; color: var(--muted); letter-spacing: .16em; font-size: 10px; font-weight: 700; }
-.books-layout { display: grid; grid-template-columns: 202px 1fr; gap: 24px; min-height: 540px; }
-.books-sidebar { border-right: 1px solid var(--soft-rule); padding-right: 18px; display: flex; flex-direction: column; gap: 3px; }
-.books-nav { appearance: none; border: 0; background: transparent; text-align: left; padding: 9px 10px; color: var(--muted); border-radius: 4px; cursor: pointer; }
-.books-nav:hover, .books-nav.active { color: var(--ink); background: rgba(0, 0, 0, .07); }
-.books-content { min-width: 0; }
-.books-note { color: var(--muted); font-size: 12px; margin-bottom: 18px; }
-.books-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 20px; }
-.books-metrics > div { background: rgba(0, 0, 0, .035); border: 1px solid var(--soft-rule); padding: 14px; }
-.books-metrics span, .books-metrics strong { display: block; }
-.books-metrics span { color: var(--muted); font-size: 11px; }
-.books-metrics strong { margin-top: 7px; font-size: 18px; font-weight: 600; }
-.books-card { border: 1px solid var(--soft-rule); padding: 18px; max-width: 580px; }
-.books-card h3 { margin: 0 0 14px; font-size: 15px; }
-.books-card label + label { margin-top: 12px; }
-.books-card .primary-action { margin-top: 14px; }
+.setup-modal { width: min(620px, 100%); }
+.setup-eyebrow { margin: 0 0 4px; color: var(--muted); letter-spacing: .16em; font-size: 10px; font-weight: 700; }
+.setup-note { margin: -5px 0 18px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.setup-card { border: 1px solid var(--soft-rule); padding: 18px; }
+.setup-card label { display: grid; gap: 5px; color: var(--muted); font-size: 12px; }
+.setup-card label + label { margin-top: 12px; }
+.setup-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.danger-action { appearance: none; border: 1px solid rgba(146, 32, 32, .32); border-radius: 4px; padding: 7px 12px; cursor: pointer; color: #8a2222; background: #fff8f8; }
+.danger-action:hover { background: #ffeded; }
 
 @media (max-width: 900px) { .schedule-row { grid-template-columns: repeat(2, 1fr); } .totals-section { grid-template-columns: 1fr 260px; } .totals-list { width: 260px; } }
-@media (max-width: 680px) { .toolbar { flex-wrap: wrap; padding: 7px 10px; } .toolbar-divider { display: none; } .toolbar-meta, .status-pill { display: none; } .document-scroll { padding: 0; } .invoice-document { padding: 35px 24px 60px; } .document-heading h1 { font-size: 44px; } .parties-grid, .totals-section, .books-layout { grid-template-columns: 1fr; gap: 28px; } .line-headings, .line-row { grid-template-columns: minmax(0, 1fr) 44px 78px 88px 20px; gap: 10px; } .totals-list { width: 100%; } .books-sidebar { border-right: 0; border-bottom: 1px solid var(--soft-rule); padding: 0 0 12px; flex-direction: row; overflow-x: auto; } .modal-grid, .documents-filters { grid-template-columns: 1fr; } }
+@media (max-width: 680px) { .toolbar { flex-wrap: wrap; padding: 7px 10px; } .toolbar-divider { display: none; } .toolbar-meta, .status-pill { display: none; } .document-scroll { padding: 0; } .invoice-document { padding: 35px 24px 60px; } .document-heading h1 { font-size: 44px; } .parties-grid, .totals-section { grid-template-columns: 1fr; gap: 28px; } .line-headings, .line-row { grid-template-columns: minmax(0, 1fr) 44px 78px 88px 20px; gap: 10px; } .totals-list { width: 100%; } .modal-grid, .documents-filters { grid-template-columns: 1fr; } .setup-actions { flex-direction: column; } .setup-actions button { width: 100%; } }
 
 @media print {
   @page { size: A4; margin: 0; }
