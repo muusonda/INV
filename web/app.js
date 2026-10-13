@@ -8,8 +8,8 @@ const MAX_OCR_PAGES = 12;
 let tesseractPromise = null;
 let pdfjsPromise = null;
 const PDF_JS_WORKER = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-const TESSERACT_WORKER = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js";
-const TESSERACT_CORE = "https://cdn.jsdelivr.net/npm/tesseract.js-core@5.0.1/tesseract-core.wasm.js";
+const TESSERACT_WORKER = "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/worker.min.js";
+const TESSERACT_CORE = "https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.0";
 const TESSDATA = "https://tessdata.projectnaptha.com/4.0.0";
 
 const $ = (id) => document.getElementById(id);
