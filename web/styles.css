@@ -82,6 +82,7 @@ button:disabled { cursor: default; opacity: .42; }
 .hidden { display: none !important; }
 .terms-section { max-width: 480px; }
 .large-textarea { min-height: 126px; }
+.banking-block { break-inside: avoid; page-break-inside: avoid; border: 0; background: transparent; }
 .banking-label { margin-top: 34px; }
 .reference-block { display: flex; flex-direction: column; gap: 4px; margin-top: 17px; }
 .reference-block strong { font-weight: 500; font-size: 13px; }
