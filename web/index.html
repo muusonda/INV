@@ -5,14 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="A privacy-safe, browser based invoice editor styled like the INV macOS app.">
   <title>INV</title>
-  <link rel="stylesheet" href="styles.css?v=97">
+  <link rel="stylesheet" href="styles.css?v=98">
 </head>
 <body>
   <div class="app-shell">
     <header class="toolbar" aria-label="Invoice actions">
       <button id="new-invoice" class="tool-button" title="New invoice">＋ <span>New</span></button>
       <button id="documents-button" class="tool-button" title="Open documents">▤ <span>Documents</span></button>
-      <label class="tool-button" for="import-file" title="Import invoice">⇩ <span>Import</span></label>
+      <label class="tool-button" for="import-file" title="Import invoice; OCR runs locally in your browser">⇩ <span>Import</span></label>
       <input id="import-file" type="file" accept=".pdf,.png,.jpg,.jpeg,.json,.txt,.csv,application/pdf,image/*,application/json,text/plain,text/csv" hidden>
       <button id="save-invoice" class="tool-button" title="Save document">⇩ <span>Save</span></button>
       <span class="toolbar-divider" aria-hidden="true"></span>
@@ -127,6 +127,9 @@
 
   <div id="books-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="books-title"><div class="modal books-modal"><div class="modal-header"><div><p class="books-eyebrow">BOOKS</p><h2 id="books-title">Accounting workspace</h2></div><button class="modal-close" data-close-modal="books-modal">×</button></div><div class="books-layout"><nav class="books-sidebar" aria-label="Books sections"><button class="books-nav active">Overview</button><button class="books-nav">Company</button><button class="books-nav">Entries</button><button class="books-nav">Bank</button><button class="books-nav">Reports</button><button class="books-nav">Compliance</button><button class="books-nav">Records</button></nav><div class="books-content"><div class="books-note">Local browser workspace · invoice data stays on this device.</div><div class="books-metrics"><div><span>Outstanding</span><strong id="books-outstanding">R0.00</strong></div><div><span>Invoices</span><strong id="books-invoices">0</strong></div><div><span>Paid</span><strong id="books-paid">R0.00</strong></div></div><div class="books-card"><h3>Company setup</h3><label>Legal name<input id="books-company-name" class="modal-input" placeholder="Your name or business name"></label><label>VAT number<input id="books-vat-number" class="modal-input" placeholder="Optional"></label><label>Business address<textarea id="books-company-address" class="modal-textarea" rows="3"></textarea></label><button id="save-books-profile" class="primary-action">Save company details</button></div></div></div></div></div>
 
-  <script src="app.js?v=97"></script>
+  <!-- OCR is performed locally in the browser. Files are not sent to a server. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script src="app.js?v=98"></script>
 </body>
 </html>

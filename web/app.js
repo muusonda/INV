@@ -1,5 +1,16 @@
 const STORAGE_KEY = "inv.web.invoices.v1";
 const PROFILE_KEY = "inv.web.books.profile.v1";
+const TESSERACT_URL = "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";
+const PDFJS_URL = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs";
+const PDFJS_WORKER_URL = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs";
+const MAX_OCR_PAGES = 12;
+
+let tesseractPromise = null;
+let pdfjsPromise = null;
+const PDF_JS_WORKER = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+const TESSERACT_WORKER = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js";
+const TESSERACT_CORE = "https://cdn.jsdelivr.net/npm/tesseract.js-core@5.0.1/tesseract-core.wasm.js";
+const TESSDATA = "https://tessdata.projectnaptha.com/4.0.0";
 
 const $ = (id) => document.getElementById(id);
 const localDate = (date = new Date()) => {
@@ -370,6 +381,268 @@ function renderDocuments() {
 function openModal(id) { $(id).classList.remove("hidden"); }
 function closeModal(id) { $(id).classList.add("hidden"); }
 
+function loadTesseract() {
+  if (window.Tesseract) return Promise.resolve(window.Tesseract);
+  if (tesseractPromise) return tesseractPromise;
+  tesseractPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = TESSERACT_URL;
+    script.async = true;
+    script.onload = () => window.Tesseract ? resolve(window.Tesseract) : reject(new Error("Tesseract.js did not load."));
+    script.onerror = () => reject(new Error("The OCR engine could not be loaded. Check the network connection and try again."));
+    document.head.appendChild(script);
+  });
+  return tesseractPromise;
+}
+
+function loadPDFJS() {
+  if (window.pdfjsLib) {
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDF_JS_WORKER;
+    return Promise.resolve(window.pdfjsLib);
+  }
+  if (pdfjsPromise) return pdfjsPromise;
+  pdfjsPromise = import(PDFJS_URL).then((module) => {
+    const pdfjs = module.default || module;
+    if (pdfjs.GlobalWorkerOptions) pdfjs.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL;
+    return pdfjs;
+  });
+  return pdfjsPromise;
+}
+
+function ocrLogger(label) {
+  return (event) => {
+    if (!event || !event.status) return;
+    const progress = Number.isFinite(event.progress) ? ` ${Math.round(event.progress * 100)}%` : "";
+    setStatus(`Reading ${label}…${progress}`);
+  };
+}
+
+async function recognizeCanvas(canvas, label, Tesseract) {
+  if (typeof Tesseract.createWorker === "function") {
+    const worker = await Tesseract.createWorker("eng", 1, {
+      workerPath: TESSERACT_WORKER,
+      corePath: TESSERACT_CORE,
+      langPath: TESSDATA,
+      logger: ocrLogger(label)
+    });
+    try {
+      const result = await worker.recognize(canvas);
+      return result?.data?.text || "";
+    } finally {
+      await worker.terminate();
+    }
+  }
+  const result = await Tesseract.recognize(canvas, "eng", {
+    workerPath: TESSERACT_WORKER,
+    corePath: TESSERACT_CORE,
+    langPath: TESSDATA,
+    logger: ocrLogger(label)
+  });
+  return result?.data?.text || "";
+}
+
+async function recognizeImage(file) {
+  const Tesseract = await loadTesseract();
+  return recognizeCanvas(file, file.name, Tesseract);
+}
+
+async function recognizePDF(file) {
+  const [pdfjs, Tesseract] = await Promise.all([loadPDFJS(), loadTesseract()]);
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const pdf = await pdfjs.getDocument({ data: bytes }).promise;
+  const pageCount = Math.min(pdf.numPages, MAX_OCR_PAGES);
+  const text = [];
+  for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
+    setStatus(`Preparing PDF page ${pageNumber} of ${pageCount} for OCR…`);
+    const page = await pdf.getPage(pageNumber);
+    const viewport = page.getViewport({ scale: 2 });
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.ceil(viewport.width);
+    canvas.height = Math.ceil(viewport.height);
+    await page.render({ canvasContext: canvas.getContext("2d", { willReadFrequently: true }), viewport }).promise;
+    text.push(await recognizeCanvas(canvas, `PDF page ${pageNumber} of ${pageCount}`, Tesseract));
+  }
+  if (pdf.numPages > MAX_OCR_PAGES) text.push(`\n[OCR stopped after ${MAX_OCR_PAGES} pages. Review the remaining pages manually.]`);
+  return text.join("\n\n");
+}
+
+function numericValue(value) {
+  const cleaned = String(value || "").replace(/[^0-9,.-]/g, "").replace(/,(?=\d{3}(?:\D|$))/g, "").replace(/,/g, ".");
+  const parsed = Number(cleaned);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function dateValue(value) {
+  const raw = String(value || "").trim();
+  let match = raw.match(/\b(20\d{2})[-/.](\d{1,2})[-/.](\d{1,2})\b/);
+  if (match) return `${match[1]}-${String(match[2]).padStart(2, "0")}-${String(match[3]).padStart(2, "0")}`;
+  match = raw.match(/\b(\d{1,2})[-/.](\d{1,2})[-/.](20\d{2})\b/);
+  if (match) return `${match[3]}-${String(match[2]).padStart(2, "0")}-${String(match[1]).padStart(2, "0")}`;
+  return "";
+}
+
+function sectionFromOCR(lines, labels, stopLabels) {
+  const labelPattern = new RegExp(`^(?:${labels.join("|")})\\s*[:#-]?\\s*(.*)$`, "i");
+  const stopPattern = new RegExp(`^(?:${stopLabels.join("|")})\\s*[:#-]?`, "i");
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = lines[index].match(labelPattern);
+    if (!match) continue;
+    const values = match[1] ? [match[1].trim()] : [];
+    for (let next = index + 1; next < lines.length && values.length < 3; next += 1) {
+      if (!lines[next] || stopPattern.test(lines[next])) break;
+      values.push(lines[next]);
+    }
+    return values.join("\n").trim();
+  }
+  return "";
+}
+
+function parseOCRInvoice(text, fileName = "") {
+  const lines = String(text || "").split(/\r?\n/).map((line) => line.replace(/\s+/g, " ").trim()).filter(Boolean);
+  const joined = lines.join(" ");
+  const invoiceNumber = joined.match(/\b(?:invoice|inv(?:oice)?|document)\s*(?:number|no\.?|#)?\s*[:#-]?\s*([A-Z0-9][A-Z0-9/-]{2,})\b/i)?.[1] || "";
+  const issueDate = dateValue(joined.match(/(?:issue|invoice|date)\s*(?:date)?\s*[:#-]?\s*([^|,;]+)/i)?.[1] || "") || today();
+  const dueDate = dateValue(joined.match(/(?:due|payment due|due date)\s*[:#-]?\s*([^|,;]+)/i)?.[1] || "") || afterDays(7);
+  const currency = (joined.match(/\b(ZAR|USD|EUR|GBP|AUD|CAD|CHF|BWP|NAD|KES|NGN|GHS)\b/i)?.[1] || "ZAR").toUpperCase();
+  const stopLabels = ["bill to", "billed to", "client", "customer", "from", "seller", "supplier", "project", "description", "subtotal", "total", "vat", "tax", "payment terms", "banking details", "bank details"];
+  const senderAddress = sectionFromOCR(lines, ["from", "seller", "supplier"], stopLabels);
+  const clientAddress = sectionFromOCR(lines, ["bill to", "billed to", "customer", "client"], stopLabels);
+  const clientName = clientAddress.split("\n")[0] || lines.find((line) => /^(?:client|customer)\s*:/i.test(line))?.replace(/^(?:client|customer)\s*:/i, "").trim() || "";
+  const projectDescription = sectionFromOCR(lines, ["project", "description", "scope"], stopLabels);
+  const paymentTerms = sectionFromOCR(lines, ["payment terms", "terms", "notes"], ["banking details", "bank details", "subtotal", "total"]);
+  const bankingDetails = sectionFromOCR(lines, ["banking details", "bank details", "bank"], ["payment terms", "terms", "subtotal", "total"]);
+  const taxRate = Number(joined.match(/(?:vat|tax)\s*(?:rate|%)?\s*[:#-]?\s*(\d{1,2}(?:\.\d+)?)\s*%/i)?.[1] || 0);
+  const total = numericValue(joined.match(/(?:grand\s+)?total\s*(?:due)?\s*[:#-]?\s*(?:[A-Z]{3}\s*)?([\d,]+(?:\.\d{1,2})?)/i)?.[1] || 0);
+  const subtotal = numericValue(joined.match(/subtotal\s*[:#-]?\s*(?:[A-Z]{3}\s*)?([\d,]+(?:\.\d{1,2})?)/i)?.[1] || total);
+  const itemLines = [];
+  const itemPattern = /^(.+?)\s+(\d+(?:[.,]\d+)?)\s+(?:[A-Z]{3}\s*)?([\d,]+(?:\.\d{1,2})?)\s+(?:[A-Z]{3}\s*)?([\d,]+(?:\.\d{1,2})?)$/i;
+  lines.forEach((line) => {
+    if (/subtotal|total|vat|tax|amount due|balance/i.test(line)) return;
+    const match = line.match(itemPattern);
+    if (!match || itemLines.length >= 20) return;
+    itemLines.push({ ...blankLine(), itemDescription: match[1].trim(), quantity: numericValue(match[2]) || 1, rate: numericValue(match[3]) });
+  });
+  if (!itemLines.length) itemLines.push({ ...blankLine(), itemDescription: "Imported invoice line — review OCR result", quantity: 1, rate: subtotal || total });
+  const senderName = senderAddress.split("\n")[0] || "";
+  return normalizeInvoice({
+    ...blankInvoice(), documentNumber: invoiceNumber, issueDate, dueDate, currency, taxRate,
+    senderName, senderAddress: senderAddress.split("\n").slice(senderName ? 1 : 0).join("\n"),
+    clientName, clientAddress: clientAddress.split("\n").slice(clientName ? 1 : 0).join("\n"),
+    projectName: fileName.replace(/\.[^.]+$/, "") || "Imported invoice", projectDescription,
+    paymentTerms, bankingDetails, lines: itemLines, status: "Draft", amountPaid: 0, payments: []
+  });
+}
+
+function parseOcrNumber(value) {
+  let cleaned = String(value || "").replace(/[R$€£]|\s/g, "").replace(/'/g, "");
+  if (!cleaned) return 0;
+  const comma = cleaned.lastIndexOf(",");
+  const dot = cleaned.lastIndexOf(".");
+  if (comma >= 0 && dot >= 0) {
+    cleaned = comma > dot ? cleaned.replace(/\./g, "").replace(",", ".") : cleaned.replace(/,/g, "");
+  } else if (comma >= 0) {
+    cleaned = cleaned.length - comma - 1 <= 2 ? cleaned.replace(",", ".") : cleaned.replace(/,/g, "");
+  }
+  const number = Number(cleaned.replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(number) ? number : 0;
+}
+
+function ocrLabelValue(lines, labels) {
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const lower = line.toLowerCase();
+    const label = labels.find((candidate) => lower === candidate || lower.startsWith(`${candidate}:`) || lower.startsWith(`${candidate} `));
+    if (!label) continue;
+    const remainder = line.slice(lower.indexOf(label) + label.length).replace(/^[\s:#-]+/, "").trim();
+    return remainder || lines[index + 1] || "";
+  }
+  return "";
+}
+
+function ocrLabelBlock(lines, labels, stops = []) {
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const lower = line.toLowerCase();
+    const label = labels.find((candidate) => lower === candidate || lower.startsWith(`${candidate}:`) || lower.startsWith(`${candidate} `));
+    if (!label) continue;
+    const values = [];
+    const remainder = line.slice(lower.indexOf(label) + label.length).replace(/^[\s:#-]+/, "").trim();
+    if (remainder) values.push(remainder);
+    for (let next = index + 1; next < lines.length && values.length < 4; next += 1) {
+      const nextLower = lines[next].toLowerCase();
+      if (stops.some((stop) => nextLower === stop || nextLower.startsWith(`${stop}:`) || nextLower.startsWith(`${stop} `))) break;
+      if (/^(invoice|tax invoice|quote|subtotal|vat|total|amount due|balance due)\b/i.test(lines[next])) break;
+      values.push(lines[next]);
+    }
+    return values.join("\n");
+  }
+  return "";
+}
+
+function ocrDateValue(value) {
+  const match = String(value || "").match(/\b(\d{1,4})[\/.-](\d{1,2})[\/.-](\d{1,4})\b/);
+  if (!match) return "";
+  let year; let month; let day;
+  if (match[1].length === 4) { year = Number(match[1]); month = Number(match[2]); day = Number(match[3]); }
+  else { day = Number(match[1]); month = Number(match[2]); year = Number(match[3]); if (year < 100) year += 2000; }
+  const date = new Date(year, month - 1, day);
+  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day ? localDate(date) : "";
+}
+
+function ocrDateList(text) {
+  const values = [];
+  (String(text || "").match(/\b\d{1,4}[\/.-]\d{1,2}[\/.-]\d{1,4}\b/g) || []).forEach((value) => { const date = ocrDateValue(value); if (date) values.push(date); });
+  return [...new Set(values)];
+}
+
+function ocrCurrencyValue(text) {
+  const upper = String(text || "").toUpperCase();
+  if (upper.includes("ZAR") || /R\s*[0-9]/.test(text)) return "ZAR";
+  if (upper.includes("EUR") || String(text).includes("€")) return "EUR";
+  if (upper.includes("GBP") || String(text).includes("£")) return "GBP";
+  if (upper.includes("USD") || String(text).includes("$")) return "USD";
+  return "ZAR";
+}
+
+function ocrTotalValue(text, lines) {
+  const values = [];
+  lines.forEach((line) => {
+    if (!/(?:amount\s+due|balance\s+due|grand\s+total|invoice\s+total|total(?:\s+due)?)/i.test(line)) return;
+    (line.match(/(?:ZAR|USD|EUR|GBP|R|\$|€|£)?\s*[0-9][0-9 ,.']*(?:[.,][0-9]{1,2})?/gi) || []).forEach((value) => { const number = parseOcrNumber(value); if (number > 0) values.push(number); });
+  });
+  if (values.length) return values[values.length - 1];
+  const fallback = String(text || "").match(/(?:ZAR|USD|EUR|GBP|R|\$|€|£)\s*[0-9][0-9 ,.']*(?:[.,][0-9]{2})/i);
+  return fallback ? parseOcrNumber(fallback[0]) : 0;
+}
+
+function importOcrResult(text, fileName = "") {
+  const cleaned = String(text || "").replace(/\u00a0/g, " ").trim();
+  const lines = cleaned.split(/\r?\n/).map((line) => line.replace(/\s+/g, " ").trim()).filter(Boolean);
+  const next = blankInvoice();
+  next.documentNumber = cleaned.match(/(?:invoice|tax invoice|document|reference|ref\.)\s*(?:number|no\.?|#)?\s*[:#-]?\s*([A-Z0-9][A-Z0-9\-/]*)/i)?.[1] || "";
+  next.clientName = ocrLabelValue(lines, ["bill to", "invoice to", "customer", "client"]);
+  next.clientContact = ocrLabelValue(lines, ["attention", "contact", "contact person"]);
+  next.clientAddress = ocrLabelBlock(lines, ["client address", "billing address", "bill to", "invoice to"], ["attention", "contact", "project", "from", "seller", "supplier"]);
+  next.senderName = ocrLabelValue(lines, ["from", "seller", "supplier", "vendor", "company"]);
+  next.senderAddress = ocrLabelBlock(lines, ["sender address", "business address", "from", "seller", "supplier"], ["bill to", "invoice to", "client", "customer", "project", "invoice date", "date"]);
+  next.paymentTerms = ocrLabelBlock(lines, ["payment terms", "terms"], ["bank", "banking", "subtotal", "vat", "total"]);
+  next.bankingDetails = ocrLabelBlock(lines, ["banking details", "bank details", "payment details", "bank"], ["subtotal", "vat", "total", "payment terms"]);
+  next.projectName = ocrLabelValue(lines, ["project", "project name"]) || fileName.replace(/\.[^.]+$/, "");
+  next.projectDescription = ocrLabelBlock(lines, ["description", "scope", "work description"], ["subtotal", "vat", "total", "payment terms"]);
+  const dates = ocrDateList(cleaned);
+  next.issueDate = ocrDateValue(ocrLabelValue(lines, ["invoice date", "issue date"])) || dates[0] || today();
+  next.dueDate = ocrDateValue(ocrLabelValue(lines, ["due date", "payment due"])) || dates[1] || afterDays(7, new Date(`${next.issueDate}T00:00:00`));
+  next.currency = ocrCurrencyValue(cleaned);
+  const taxMatch = cleaned.match(/(?:VAT|tax)[^\n%]{0,30}?([0-9]+(?:[.,][0-9]+)?)\s*%/i);
+  next.taxRate = Math.min(Math.max(taxMatch ? parseOcrNumber(taxMatch[1]) : 0, 0), 100);
+  const total = ocrTotalValue(cleaned, lines);
+  next.lines = [{ ...blankLine(), itemDescription: "Imported invoice total — review and replace with itemised lines", quantity: 1, rate: next.taxRate > 0 ? total / (1 + next.taxRate / 100) : total }];
+  next.projectDescription = next.projectDescription || `Imported locally from ${fileName || "uploaded invoice"}. Review all converted fields against the original before issuing.`;
+  next.status = "Draft"; next.amountPaid = 0; next.payments = [];
+  invoice = next;
+  renderDocument(); markDirty();
+}
+
 function importText(text, fileName = "") {
   try {
     const parsed = JSON.parse(text);
@@ -388,12 +661,23 @@ function importText(text, fileName = "") {
   invoice = next; renderDocument(); markDirty(); setStatus("Invoice text imported. Review the converted fields before issuing.");
 }
 
-function importFile(event) {
+async function importVisualFile(file) {
+  setStatus("Starting local OCR…");
+  const text = file.type === "application/pdf" || /\.pdf$/i.test(file.name)
+    ? await recognizePDF(file)
+    : await recognizeImage(file);
+  if (!text.trim()) throw new Error("No readable text was found in the uploaded file.");
+  invoice = parseOCRInvoice(text, file.name);
+  renderDocument(); markDirty();
+  setStatus("OCR complete. Review every field before issuing.");
+}
+
+async function importFile(event) {
   const file = event.target.files[0];
   if (!file) return;
-  if (/\.pdf$|^image\//i.test(file.name) || file.type === "application/pdf" || file.type.startsWith("image/")) {
-    invoice = blankInvoice(); invoice.projectName = file.name.replace(/\.[^.]+$/, ""); invoice.lines = [{ ...blankLine(), itemDescription: "Imported invoice total — review and replace with itemised lines" }];
-    renderDocument(); markDirty(); setStatus("PDF/image imported as an editable draft. Check each field against the original.");
+  if (/\.pdf$/i.test(file.name) || file.type === "application/pdf" || file.type.startsWith("image/")) {
+    try { await importVisualFile(file); }
+    catch (error) { setStatus(error?.message || "OCR could not read this file. You can still enter the invoice manually."); }
   } else {
     file.text().then((text) => importText(text, file.name)).catch(() => setStatus("The selected file could not be opened."));
   }
