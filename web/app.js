@@ -95,10 +95,10 @@ function totals(draft) {
 }
 
 function stages(draft) {
-  if (draft.paymentPlan !== "50/50") return [{ label: "Invoice", fraction: 1, due: draft.dueDate }];
+  if (draft.paymentPlan !== "50/50") return [{ label: "Invoice", fraction: 1, due: draft.dueDate, isDeposit: false }];
   return [
-    { label: "Invoice 1 of 2 — 50% deposit", fraction: .5, due: draft.dueDate },
-    { label: "Invoice 2 of 2 — final 50% balance", fraction: .5, due: draft.dueDate }
+    { label: "Invoice 1 of 2 — 50% deposit", fraction: .5, due: draft.dueDate, isDeposit: true },
+    { label: "Invoice 2 of 2 — final 50% balance", fraction: .5, due: draft.dueDate, isDeposit: false }
   ];
 }
 
@@ -108,7 +108,7 @@ function invoicePage(draft, stage) {
   const paymentTerms = [
     stage.label,
     draft.paymentTerms.trim(),
-    draft.paymentPlan === "50/50" ? (stage.fraction === .5 ? "Payment is due before work begins." : "Payment is due on final delivery.") : ""
+    draft.paymentPlan === "50/50" ? (stage.isDeposit ? "Payment is due before work begins." : "Payment is due on final delivery.") : ""
   ].filter(Boolean).join("\n");
   const rows = draft.lines.map((line) => `<tr><td>${escapeHTML(line.description || "Item")}</td><td>${line.quantity}</td><td>${escapeHTML(money(line.rate))}</td><td>${escapeHTML(money(line.quantity * line.rate * stage.fraction))}</td></tr>`).join("");
   return `<article class="invoice-page">
