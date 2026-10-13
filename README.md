@@ -2,7 +2,7 @@
 
 INV is a native macOS invoice application for creating, editing, importing, and exporting invoices.
 
-The `web/` directory is a browser version that can be published on GitHub Pages. It keeps saved invoices in the browser's local storage and uses the browser print dialog to create a PDF, so no invoice data is sent to a server.
+The `web/` directory is a no-login browser version published on GitHub Pages. It keeps saved invoices in the browser's local storage and uses the browser print dialog to create a PDF, so no invoice data is sent to an INV server. PDF and image imports use PDF.js and Tesseract.js in the browser to create an editable draft; the first OCR run downloads the open-source OCR assets and English language data from their CDNs, but the invoice file itself is not uploaded.
 
 ## Source layout
 
@@ -35,4 +35,4 @@ The repository needs GitHub Pages enabled with the **GitHub Actions** source. Af
 
 ## Privacy
 
-Keep this repository private. The app supports user-configured business and payment details; do not publish personal or customer information.
+This repository is intentionally public and contains only generic source code and app assets. Do not commit personal, customer, banking, or other invoice data. The web app stores documents only in each user's browser; there is no shared account, database, or server-side invoice history. Users can clear their browser's local site data at any time.
