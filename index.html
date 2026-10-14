@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Create invoices in minutes. Turn uploaded invoices into editable drafts. No login. No subscription.">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="INV">
+  <meta property="og:title" content="INV — Simple, private invoicing">
+  <meta property="og:description" content="Create invoices in minutes. Turn uploaded invoices into editable drafts. No login. No subscription.">
+  <meta property="og:url" content="https://muusonda.github.io/INV/">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="INV — Simple, private invoicing">
+  <meta name="twitter:description" content="Create invoices in minutes. Turn uploaded invoices into editable drafts. No login. No subscription.">
+  <title>INV — Simple, private invoicing</title>
+    <link rel="stylesheet" href="styles.css?v=104">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="toolbar" aria-label="Invoice actions">
+      <button id="new-invoice" class="tool-button" title="New invoice">＋ <span>New</span></button>
+      <button id="new-quote" class="tool-button quote-action" title="New quote">◇ <span>Quote</span></button>
+      <button id="documents-button" class="tool-button" title="Open documents">▤ <span>Documents</span></button>
+      <label class="tool-button" for="import-file" title="Import invoice; OCR runs locally in your browser">⇩ <span>Import</span></label>
+      <input id="import-file" type="file" accept=".pdf,.png,.jpg,.jpeg,.json,.txt,.csv,application/pdf,image/*,application/json,text/plain,text/csv" hidden>
+      <button id="save-invoice" class="tool-button" title="Save document">⇩ <span>Save</span></button>
+      <span class="toolbar-divider" aria-hidden="true"></span>
+      <button id="issue-invoice" class="tool-button" title="Issue invoice">✓ <span>Issue</span></button>
+      <button id="export-invoice" class="tool-button" title="Export PDF">▣ <span>Export</span></button>
+      <button id="payment-button" class="tool-button" title="Record payment">R <span>Payment</span></button>
+      <button id="setup-button" class="tool-button" title="Open invoice setup">⚙ <span>Setup</span></button>
+      <div class="toolbar-spacer"></div>
+      <span id="toolbar-type" class="toolbar-meta">Invoice</span>
+      <span id="toolbar-status" class="status-pill">Draft</span>
+    </header>
+
+    <main class="document-scroll">
+      <article id="invoice-document" class="invoice-document" aria-label="Editable invoice document">
+        <section class="document-heading">
+          <div class="heading-meta">
+            <label class="paper-label">STATUS</label>
+            <span id="document-status" class="paper-status">DRAFT</span>
+            <label class="paper-label">DOCUMENT NUMBER</label>
+            <input id="document-number" class="paper-input small-input" autocomplete="off" placeholder="NUMBER ASSIGNED ON ISSUE">
+          </div>
+          <h1 id="document-title">INVOICE</h1>
+        </section>
+
+        <section class="schedule-row" aria-label="Invoice schedule">
+          <div class="paper-field">
+            <label class="paper-label" for="issue-date">ISSUE DATE</label>
+            <input id="issue-date" class="paper-input" type="date">
+          </div>
+          <div class="paper-field schedule-field">
+            <label class="paper-label" for="payment-plan">PAYMENT SCHEDULE</label>
+            <div class="schedule-controls">
+              <select id="payment-plan" class="paper-select"><option>Single</option><option>50/50</option></select>
+              <select id="due-date-mode" class="paper-select"><option>Specific date</option><option>At project start</option><option>On delivery</option></select>
+              <input id="due-date" class="paper-input" type="date" aria-label="First payment due date">
+              <span id="final-due-wrap" class="final-due-wrap">
+                <select id="final-due-date-mode" class="paper-select" aria-label="Final payment due mode"><option>On delivery</option><option>Specific date</option></select>
+                <input id="final-due-date" class="paper-input" type="date" aria-label="Final payment due date">
+              </span>
+            </div>
+          </div>
+          <div class="paper-field">
+            <label class="paper-label" for="payment-stage">PAYMENT STAGE</label>
+            <input id="payment-stage" class="paper-input" placeholder="Full payment, deposit or final balance">
+          </div>
+          <div class="paper-field currency-field">
+            <label class="paper-label" for="currency">CURRENCY</label>
+            <input id="currency" class="paper-input" maxlength="3" placeholder="ZAR">
+          </div>
+        </section>
+
+        <section class="document-section parties-grid">
+          <div class="party-column">
+            <h2 class="section-label">FROM</h2>
+            <label class="paper-label" for="sender-name">NAME</label>
+            <input id="sender-name" class="paper-input" autocomplete="organization" placeholder="Your name or business name">
+            <textarea id="sender-address" class="paper-textarea" rows="4" placeholder="Business address&#10;Email address&#10;Phone number"></textarea>
+            <label class="paper-label" for="sender-vat-number">VAT NUMBER (OPTIONAL)</label>
+            <input id="sender-vat-number" class="paper-input" placeholder="VAT registration number">
+          </div>
+          <div class="party-column">
+            <h2 class="section-label">BILL TO</h2>
+            <label class="paper-label" for="client-name">CLIENT</label>
+            <input id="client-name" class="paper-input" list="saved-clients" autocomplete="name" placeholder="Client name or business">
+            <datalist id="saved-clients"></datalist>
+            <label class="paper-label" for="client-contact">ATTENTION</label>
+            <input id="client-contact" class="paper-input" placeholder="Contact person">
+            <textarea id="client-address" class="paper-textarea" rows="4" placeholder="Client billing address&#10;Email address&#10;Phone number"></textarea>
+          </div>
+        </section>
+
+        <section class="document-section">
+          <h2 class="section-label">PROJECT</h2>
+          <label class="paper-label" for="project-name">PROJECT NAME</label>
+          <input id="project-name" class="paper-input" placeholder="Enter project name">
+          <textarea id="project-description" class="paper-textarea" rows="4" placeholder="Describe the work, deliverables and intended usage"></textarea>
+        </section>
+
+        <section class="document-section line-items-section">
+          <div class="line-headings"><span>DESCRIPTION</span><span>QTY</span><span>RATE</span><span>AMOUNT</span><span></span></div>
+          <div id="line-items"></div>
+          <button id="add-line" class="add-line-button">＋ ADD LINE</button>
+        </section>
+
+        <section class="document-section totals-section">
+          <div class="vat-editor"><h2 class="section-label">VAT</h2><label class="paper-label" for="tax-rate">RATE %</label><input id="tax-rate" class="paper-input number-input" type="number" min="0" max="100" step="0.01" placeholder="0"></div>
+          <div class="totals-list">
+            <div class="amount-row"><span>SUBTOTAL</span><strong id="subtotal-value">R0.00</strong></div>
+            <div class="amount-row"><span>VAT</span><strong id="tax-value">N/A</strong></div>
+            <hr>
+            <div class="amount-row total-row"><span>TOTAL</span><strong id="total-value">R0.00</strong></div>
+            <div id="paid-row" class="amount-row payment-total-row hidden"><span>PAID</span><strong id="paid-value">R0.00</strong></div>
+            <div id="balance-row" class="amount-row total-row payment-total-row hidden"><span>BALANCE</span><strong id="balance-value">R0.00</strong></div>
+          </div>
+        </section>
+
+        <section class="document-section terms-section">
+          <div id="terms-heading" class="section-label">PAYMENT TERMS</div>
+          <textarea id="payment-terms" class="paper-textarea large-textarea" rows="5" placeholder="Payment due date, licensing terms and any late-payment conditions"></textarea>
+          <div class="section-label banking-label">BANKING DETAILS</div>
+          <textarea id="banking-details" class="paper-textarea" rows="3" placeholder="Account holder&#10;Bank&#10;Account number&#10;Branch code"></textarea>
+          <div class="reference-block"><span class="paper-label">PAYMENT REFERENCE</span><strong id="payment-reference">ASSIGNED ON ISSUE</strong></div>
+        </section>
+      </article>
+    </main>
+
+    <section id="export-pages" class="export-pages" aria-hidden="true"></section>
+    <footer class="status-bar"><span id="status-icon" class="status-icon">●</span><span id="status">Ready</span><span class="status-spacer"></span><span id="unsaved-label" class="unsaved-label"></span></footer>
+  </div>
+
+  <div id="documents-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="documents-title"><div class="modal documents-modal"><div class="modal-header"><h2 id="documents-title">Documents</h2><button class="modal-close" data-close-modal="documents-modal">×</button></div><div class="documents-filters"><input id="document-search" class="modal-input" placeholder="Search number, client or project"><select id="status-filter" class="modal-select"><option>All</option><option>Draft</option><option>Issued</option><option>Overdue</option><option>Partially Paid</option><option>Paid</option></select></div><div id="documents-list" class="documents-list"></div><div class="modal-footer"><button class="secondary-action" data-close-modal="documents-modal">Close</button></div></div></div>
+
+  <div id="payment-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="payment-title"><div class="modal payment-modal"><div class="modal-header"><h2 id="payment-title">Record payment</h2><button class="modal-close" data-close-modal="payment-modal">×</button></div><div class="modal-grid"><label>Date<input id="payment-date" class="modal-input" type="date"></label><label>Amount<input id="payment-amount" class="modal-input" type="number" min="0" step="0.01"></label><label>Type<select id="payment-type" class="modal-select"><option>Payment</option><option>Refund</option></select></label><label>Method<select id="payment-method" class="modal-select"><option>Bank transfer</option><option>Card</option><option>Cash</option><option>Other</option></select></label><label>Reference<input id="payment-reference-input" class="modal-input"></label><label class="full-span">Notes<textarea id="payment-notes" class="modal-textarea" rows="3"></textarea></label></div><div class="modal-footer"><button class="secondary-action" data-close-modal="payment-modal">Cancel</button><button id="save-payment" class="primary-action">Save payment</button></div></div></div>
+
+  <div id="setup-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="setup-title"><div class="modal setup-modal"><div class="modal-header"><div><p class="setup-eyebrow">OPTIONAL SETUP</p><h2 id="setup-title">Company details</h2></div><button class="modal-close" data-close-modal="setup-modal">×</button></div><p class="setup-note">No account required. These details and your Documents history stay only in this browser.</p><div class="setup-card"><label>Legal name<input id="setup-company-name" class="modal-input" placeholder="Your name or business name"></label><label>VAT number<input id="setup-vat-number" class="modal-input" placeholder="Optional"></label><label>Business address<textarea id="setup-company-address" class="modal-textarea" rows="3" placeholder="Business address"></textarea></label><div class="setup-actions"><button id="save-setup-profile" class="primary-action">Save company details</button><button id="download-backup" class="secondary-action">Download editable backup</button><button id="clear-local-data" class="danger-action">Clear local data</button></div></div></div></div>
+
+  <!-- OCR is performed locally in the browser. Files are not sent to a server. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script src="app.js?v=105"></script>
+</body>
+</html>
