@@ -1113,7 +1113,24 @@ function clearLocalData() {
   setStatus("Local data cleared");
 }
 
+function closeNewMenu() {
+  const menu = $("new-menu");
+  const button = $("new-menu-button");
+  if (!menu || !button) return;
+  menu.classList.add("hidden");
+  button.setAttribute("aria-expanded", "false");
+}
+
+function toggleNewMenu() {
+  const menu = $("new-menu");
+  const button = $("new-menu-button");
+  if (!menu || !button) return;
+  const open = menu.classList.toggle("hidden");
+  button.setAttribute("aria-expanded", String(!open));
+}
+
 function handleShortcuts(event) {
+  if (event.key === "Escape") { closeNewMenu(); return; }
   if (!(event.metaKey || event.ctrlKey)) return;
   const key = event.key.toLowerCase();
   if (key === "s") { event.preventDefault(); saveInvoice(); }
@@ -1122,8 +1139,9 @@ function handleShortcuts(event) {
   if (key === "e" && event.shiftKey) { event.preventDefault(); startExport(); }
 }
 
-$("new-invoice").onclick = () => saveNewDocument("INVOICE");
-$("new-quote").onclick = () => saveNewDocument("QUOTE");
+$("new-menu-button").onclick = toggleNewMenu;
+$("new-invoice").onclick = () => { closeNewMenu(); saveNewDocument("INVOICE"); };
+$("new-quote").onclick = () => { closeNewMenu(); saveNewDocument("QUOTE"); };
 $("documents-button").onclick = () => { renderDocuments(); openModal("documents-modal"); };
 $("save-invoice").onclick = saveInvoice;
 $("issue-invoice").onclick = issueInvoice;
@@ -1140,6 +1158,7 @@ $("document-search").oninput = renderDocuments;
 $("status-filter").onchange = renderDocuments;
 document.querySelectorAll("[data-close-modal]").forEach((button) => button.addEventListener("click", () => closeModal(button.dataset.closeModal)));
 document.querySelectorAll(".modal-backdrop").forEach((backdrop) => backdrop.addEventListener("click", (event) => { if (event.target === backdrop) closeModal(backdrop.id); }));
+document.addEventListener("click", (event) => { if (!event.target.closest(".new-menu-wrap")) closeNewMenu(); });
 document.addEventListener("keydown", handleShortcuts);
 window.addEventListener("beforeunload", () => { if (hasUnsavedChanges) persistInvoice(true); });
 

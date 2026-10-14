@@ -29,9 +29,21 @@ button:disabled { cursor: default; opacity: .42; }
 
 .app-shell { min-height: 100vh; display: flex; flex-direction: column; }
 .toolbar { display: flex; align-items: center; gap: 9px; min-height: 44px; padding: 0 14px; background: var(--paper); border-bottom: 1px solid var(--soft-rule); position: sticky; top: 0; z-index: 10; }
+.new-menu-wrap { position: relative; }
 .tool-button { appearance: none; border: 0; background: transparent; color: var(--ink); display: inline-flex; align-items: center; gap: 5px; min-height: 30px; padding: 4px 5px; border-radius: 5px; font-size: 13px; }
 .tool-button:hover, .tool-button:focus-visible { background: rgba(0, 0, 0, .07); outline: none; }
-.quote-action { color: #365f78; }
+.tool-icon, .menu-icon { display: inline-flex; flex: 0 0 auto; color: currentColor; }
+.tool-icon { width: 17px; height: 17px; }
+.menu-icon { width: 19px; height: 19px; margin-top: 1px; color: var(--muted); }
+.tool-icon svg, .menu-icon svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.menu-chevron { width: 6px; height: 6px; margin: -3px 0 0 1px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; color: var(--muted); transform: rotate(45deg); }
+.new-menu { position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; width: 190px; padding: 6px; background: var(--paper); border: 1px solid var(--soft-rule); border-radius: 6px; box-shadow: 0 12px 28px rgba(0, 0, 0, .14); }
+.new-menu-item { display: flex; align-items: flex-start; gap: 10px; width: 100%; border: 0; border-radius: 5px; padding: 9px 10px; background: transparent; color: var(--ink); text-align: left; cursor: pointer; }
+.new-menu-item:hover, .new-menu-item:focus-visible { background: rgba(0, 0, 0, .07); outline: none; }
+.new-menu-copy { display: block; min-width: 0; }
+.new-menu-copy strong, .new-menu-copy small { display: block; }
+.new-menu-copy strong { font-size: 13px; font-weight: 650; }
+.new-menu-copy small { margin-top: 2px; color: var(--muted); font-size: 11px; }
 .toolbar-divider { width: 1px; height: 22px; background: var(--rule); margin: 0 3px; }
 .toolbar-spacer { flex: 1; }
 .toolbar-meta { color: var(--muted); font-size: 12px; font-weight: 600; }
