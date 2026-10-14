@@ -4,13 +4,11 @@ const LEGACY_PROFILE_KEY = "inv.web.books.profile.v1";
 const TESSERACT_URL = "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";
 const PDFJS_URL = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs";
 const PDFJS_WORKER_URL = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs";
-const HTML2CANVAS_URL = "https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js";
 const PDF_LIB_URL = "https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js";
 const MAX_OCR_PAGES = 12;
 
 let tesseractPromise = null;
 let pdfjsPromise = null;
-let html2canvasPromise = null;
 let pdfLibPromise = null;
 let isExporting = false;
 const PDF_JS_WORKER = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
@@ -318,11 +316,6 @@ function loadScriptOnce(url, globalName) {
   });
 }
 
-function loadHTML2Canvas() {
-  if (!html2canvasPromise) html2canvasPromise = loadScriptOnce(HTML2CANVAS_URL, "html2canvas");
-  return html2canvasPromise;
-}
-
 function loadPDFLib() {
   if (!pdfLibPromise) pdfLibPromise = loadScriptOnce(PDF_LIB_URL, "PDFLib");
   return pdfLibPromise;
@@ -333,71 +326,226 @@ function safeExportName() {
   return raw.replace(/[^a-z0-9._-]+/gi, "-").replace(/^-+|-+$/g, "") || "INV-Draft";
 }
 
-async function exportCleanPDF() {
-  const [html2canvas, PDFLib] = await Promise.all([loadHTML2Canvas(), loadPDFLib()]);
-  if (document.fonts?.ready) await document.fonts.ready;
+function pdfSafeText(value) {
+  return String(value ?? "")
+    .replace(/[—–]/g, "-")
+    .replace(/[·•]/g, "/")
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/\u00a0/g, " ");
+}
 
-  const container = $("export-pages");
-  if (!container) throw new Error("The export pages are unavailable.");
-  const previous = {
-    display: container.style.display,
-    position: container.style.position,
-    left: container.style.left,
-    top: container.style.top,
-    width: container.style.width,
-    zIndex: container.style.zIndex
-  };
-
-  container.style.display = "block";
-  container.style.position = "fixed";
-  container.style.left = "-10000px";
-  container.style.top = "0";
-  container.style.width = "760px";
-  container.style.zIndex = "-1";
-
-  try {
-    const pages = [...container.querySelectorAll(".export-page")];
-    if (!pages.length) throw new Error("There is nothing to export.");
-
-    const pdf = await PDFLib.PDFDocument.create();
-    const pageWidth = 595.28;
-    const pageHeight = 841.89;
-    const margin = 18 * 72 / 25.4;
-
-    for (const pageElement of pages) {
-      const canvas = await html2canvas(pageElement, {
-        backgroundColor: "#ffffff",
-        scale: Math.min(window.devicePixelRatio || 1, 2),
-        useCORS: true,
-        logging: false
-      });
-      const image = await pdf.embedPng(canvas.toDataURL("image/png"));
-      const availableWidth = pageWidth - margin * 2;
-      const availableHeight = pageHeight - margin * 2;
-      const scale = Math.min(availableWidth / image.width, availableHeight / image.height);
-      const width = image.width * scale;
-      const height = image.height * scale;
-      const page = pdf.addPage([pageWidth, pageHeight]);
-      page.drawImage(image, {
-        x: (pageWidth - width) / 2,
-        y: pageHeight - margin - height,
-        width,
-        height
-      });
+function pdfWrap(font, value, size, width) {
+  const words = pdfSafeText(value).split(/\s+/).filter(Boolean);
+  if (!words.length) return [""];
+  const lines = [];
+  let line = "";
+  words.forEach((word) => {
+    const candidate = line ? `${line} ${word}` : word;
+    if (font.widthOfTextAtSize(candidate, size) <= width || !line) {
+      line = candidate;
+      return;
     }
+    lines.push(line);
+    line = word;
+  });
+  if (line) lines.push(line);
+  return lines;
+}
 
-    const bytes = await pdf.save();
-    const blobURL = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
-    const link = document.createElement("a");
-    link.href = blobURL;
-    link.download = `${safeExportName()}.pdf`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(blobURL), 1000);
-  } finally {
-    Object.entries(previous).forEach(([key, value]) => { container.style[key] = value; });
-  }
+function drawPdfWrapped(page, value, x, top, width, font, size, color, lineHeight, scale, pageHeight, maxLines = 99) {
+  const lines = String(value ?? "").split(/\r?\n/).flatMap((line) => pdfWrap(font, line, size * scale, width * scale));
+  lines.forEach((line, index) => {
+    page.drawText(pdfSafeText(line), {
+      x,
+      y: pageHeight - (top + index * lineHeight) * scale - size * scale,
+      size: size * scale,
+      font,
+      color
+    });
+  });
+  return top + Math.max(1, lines.length) * lineHeight;
+}
+
+function drawPdfLabel(page, value, x, top, font, size, color, scale, pageHeight) {
+  page.drawText(pdfSafeText(value).toUpperCase(), {
+    x,
+    y: pageHeight - top * scale - size * scale,
+    size: size * scale,
+    font,
+    color
+  });
+}
+
+function drawPdfRule(page, x, top, width, color, scale, pageHeight) {
+  page.drawLine({
+    start: { x, y: pageHeight - top * scale },
+    end: { x: x + width * scale, y: pageHeight - top * scale },
+    thickness: 0.7 * scale,
+    color
+  });
+}
+
+function drawPdfField(page, label, value, x, top, width, fonts, colors, scale, pageHeight, valueSize = 10, maxLines = 3) {
+  drawPdfLabel(page, label, x, top, fonts.bold, 8, colors.muted, scale, pageHeight);
+  return drawPdfWrapped(page, value || "", x, top + 12, width, fonts.regular, valueSize, colors.ink, valueSize + 4, scale, pageHeight, maxLines);
+}
+
+function drawPdfExportPage(targetPage, draft, stage, fonts, colors) {
+  // Measure the complete invoice before fitting it inside the page margins.
+  // Never silently drop overflowing address, project, banking or terms text.
+  const operations = [];
+  const page = {
+    drawText(text, options) { operations.push({ type: "text", text, options }); },
+    drawLine(options) { operations.push({ type: "line", options }); }
+  };
+  const pageWidth = 595.28;
+  const pageHeight = 841.89;
+  const margin = 18 * 72 / 25.4;
+  const designWidth = 760;
+  const designHeight = 1080;
+  const scale = Math.min((pageWidth - margin * 2) / designWidth, (pageHeight - margin * 2) / designHeight);
+  const left = margin;
+  const contentWidth = designWidth * scale;
+  const ink = colors.ink;
+  const muted = colors.muted;
+  const rule = colors.rule;
+  const right = left + contentWidth;
+  const result = totals(draft);
+  const amount = result.total * stage.fraction;
+  const gap = 24;
+
+  let top = 54;
+  drawPdfLabel(page, "STATUS", left, top, fonts.bold, 8, muted, scale, pageHeight);
+  drawPdfWrapped(page, draft.status.toUpperCase(), left, top + 12, 210, fonts.regular, 10, ink, 14, scale, pageHeight, 1);
+  drawPdfLabel(page, "DOCUMENT NUMBER", left, top + 40, fonts.bold, 8, muted, scale, pageHeight);
+  drawPdfWrapped(page, draft.documentNumber || "", left, top + 52, 210, fonts.regular, 10, ink, 14, scale, pageHeight, 1);
+  const title = pdfSafeText(currentTitle(draft));
+  const titleSize = 42;
+  const titleWidth = fonts.bold.widthOfTextAtSize(title, titleSize * scale);
+  page.drawText(title, { x: right - titleWidth, y: pageHeight - top * scale - titleSize * scale, size: titleSize * scale, font: fonts.bold, color: ink });
+  top = 148;
+
+  const scheduleWidth = (designWidth - 3 * gap) / 4;
+  const schedule = [
+    ["ISSUE DATE", draft.issueDate],
+    ["PAYMENT SCHEDULE", `${draft.paymentPlan} / ${dueText(stage)}`],
+    ["PAYMENT STAGE", draft.paymentStage || stage.label],
+    ["CURRENCY", draft.currency]
+  ];
+  schedule.forEach(([label, value], index) => drawPdfField(page, label, value, left + index * (scheduleWidth + gap) * scale, top, scheduleWidth, fonts, colors, scale, pageHeight, 10, 3));
+  top = 238;
+
+  const columnGap = 42;
+  const columnWidth = (designWidth - columnGap) / 2;
+  drawPdfLabel(page, "FROM", left, top, fonts.bold, 12, ink, scale, pageHeight);
+  drawPdfLabel(page, "BILL TO", left + (columnWidth + columnGap) * scale, top, fonts.bold, 12, ink, scale, pageHeight);
+  let fromTop = top + 28;
+  fromTop = drawPdfField(page, "NAME", draft.senderName, left, fromTop, columnWidth, fonts, colors, scale, pageHeight, 10, 2) + 8;
+  fromTop = drawPdfWrapped(page, draft.senderAddress, left, fromTop, columnWidth, fonts.regular, 10, ink, 14, scale, pageHeight, 5) + 8;
+  if (draft.senderVatNumber) fromTop = drawPdfField(page, "VAT NUMBER", draft.senderVatNumber, left, fromTop, columnWidth, fonts, colors, scale, pageHeight, 10, 1);
+  let billTop = top + 28;
+  const billX = left + (columnWidth + columnGap) * scale;
+  billTop = drawPdfField(page, "CLIENT", draft.clientName, billX, billTop, columnWidth, fonts, colors, scale, pageHeight, 10, 2) + 8;
+  billTop = drawPdfField(page, "ATTENTION", draft.clientContact, billX, billTop, columnWidth, fonts, colors, scale, pageHeight, 10, 2) + 8;
+  billTop = drawPdfWrapped(page, draft.clientAddress, billX, billTop, columnWidth, fonts.regular, 10, ink, 14, scale, pageHeight, 5);
+  top = Math.max(fromTop, billTop) + 26;
+
+  drawPdfLabel(page, "PROJECT", left, top, fonts.bold, 12, ink, scale, pageHeight);
+  top = drawPdfField(page, "PROJECT NAME", draft.projectName, left, top + 24, designWidth, fonts, colors, scale, pageHeight, 10, 2) + 6;
+  top = drawPdfWrapped(page, draft.projectDescription, left, top, designWidth, fonts.regular, 10, ink, 14, scale, pageHeight, 4) + 24;
+
+  const descriptionWidth = 350;
+  const qtyX = left + 405 * scale;
+  const rateX = left + 485 * scale;
+  const amountX = left + 585 * scale;
+  drawPdfLabel(page, "DESCRIPTION", left, top, fonts.bold, 8, muted, scale, pageHeight);
+  drawPdfLabel(page, "QTY", qtyX, top, fonts.bold, 8, muted, scale, pageHeight);
+  drawPdfLabel(page, "RATE", rateX, top, fonts.bold, 8, muted, scale, pageHeight);
+  drawPdfLabel(page, "AMOUNT", amountX, top, fonts.bold, 8, muted, scale, pageHeight);
+  drawPdfRule(page, left, top + 18, designWidth, rule, scale, pageHeight);
+  top += 30;
+  draft.lines.forEach((line) => {
+    const descriptionLines = pdfWrap(fonts.regular, line.itemDescription || "Item", 10 * scale, descriptionWidth * scale);
+    descriptionLines.forEach((text, index) => page.drawText(pdfSafeText(text), { x: left, y: pageHeight - (top + index * 14) * scale - 10 * scale, size: 10 * scale, font: fonts.regular, color: ink }));
+    const rowY = pageHeight - top * scale - 10 * scale;
+    page.drawText(pdfSafeText(line.quantity), { x: qtyX, y: rowY, size: 10 * scale, font: fonts.regular, color: ink });
+    page.drawText(pdfSafeText(money(line.rate, draft.currency)), { x: rateX, y: rowY, size: 10 * scale, font: fonts.regular, color: ink });
+    page.drawText(pdfSafeText(money(line.quantity * line.rate * stage.fraction, draft.currency)), { x: amountX, y: rowY, size: 10 * scale, font: fonts.regular, color: ink });
+    top += Math.max(1, descriptionLines.length) * 14 + 12;
+    drawPdfRule(page, left, top, designWidth, rule, scale, pageHeight);
+    top += 12;
+  });
+
+  const totalsX = left + 470 * scale;
+  const totalsWidth = 290;
+  const totalRows = [
+    ["SUBTOTAL", money(result.subtotal * stage.fraction, draft.currency), false],
+    ["VAT", draft.taxRate > 0 ? money(result.tax * stage.fraction, draft.currency) : "N/A", false],
+    ["TOTAL", money(amount, draft.currency), true]
+  ];
+  let totalsTop = top + 6;
+  totalRows.forEach(([label, value, bold], index) => {
+    if (index === 2) drawPdfRule(page, totalsX, totalsTop, totalsWidth, rule, scale, pageHeight);
+    const font = bold ? fonts.bold : fonts.regular;
+    const size = bold ? 11 : 9;
+    drawPdfLabel(page, label, totalsX, totalsTop + (index === 2 ? 10 : 0), font, size, bold ? ink : muted, scale, pageHeight);
+    const valueWidth = font.widthOfTextAtSize(pdfSafeText(value), size * scale);
+    page.drawText(pdfSafeText(value), { x: right - valueWidth, y: pageHeight - (totalsTop + (index === 2 ? 10 : 0)) * scale - size * scale, size: size * scale, font, color: ink });
+    totalsTop += index === 2 ? 26 : 20;
+  });
+  top = Math.max(top + 6, totalsTop) + 24;
+
+  const terms = [stage.label, draft.paymentTerms.trim(), draft.paymentPlan === "50/50" ? (stage.isDeposit ? "Payment is due before work begins." : "Payment is due on final delivery.") : ""].filter(Boolean).join("\n");
+  const halfWidth = 390;
+  drawPdfLabel(page, draft.documentType === "QUOTE" ? "QUOTE TERMS & ACCEPTANCE" : "PAYMENT TERMS", left, top, fonts.bold, 10, muted, scale, pageHeight);
+  top = drawPdfWrapped(page, terms || "Add payment terms", left, top + 18, halfWidth, fonts.regular, 10, ink, 14, scale, pageHeight, 7) + 18;
+  drawPdfLabel(page, "BANKING DETAILS", left, top, fonts.bold, 10, muted, scale, pageHeight);
+  top = drawPdfWrapped(page, draft.bankingDetails, left, top + 18, halfWidth, fonts.regular, 10, ink, 14, scale, pageHeight, 6) + 18;
+  drawPdfLabel(page, "PAYMENT REFERENCE", left, top, fonts.bold, 8, muted, scale, pageHeight);
+  drawPdfWrapped(page, draft.documentNumber || "ASSIGNED ON ISSUE", left, top + 12, halfWidth, fonts.bold, 10, ink, 14, scale, pageHeight, 1);
+  const footer = pdfSafeText(stage.label).toUpperCase();
+  const footerWidth = fonts.regular.widthOfTextAtSize(footer, 8 * scale);
+  drawPdfLabel(page, footer, right - footerWidth, Math.max(1040, top + 48), fonts.regular, 8, muted, scale, pageHeight);
+  const bounds = operations.flatMap(({ type, text, options: o }) => type === "text"
+    ? [{ x: o.x, y: o.y - o.size * 0.25 }, { x: o.x + o.font.widthOfTextAtSize(text, o.size), y: o.y + o.size }]
+    : [o.start, o.end]);
+  const minX = Math.min(left, ...bounds.map(point => point.x));
+  const maxX = Math.max(right, ...bounds.map(point => point.x));
+  const minY = Math.min(...bounds.map(point => point.y));
+  const maxY = Math.max(...bounds.map(point => point.y));
+  const fit = Math.min(1, (pageWidth - margin * 2) / (maxX - minX), (pageHeight - margin * 2) / (maxY - minY));
+  const place = ({ x, y }) => ({ x: margin + (x - minX) * fit, y: pageHeight - margin - (maxY - y) * fit });
+  operations.forEach(({ type, text, options: o }) => {
+    if (type === "text") targetPage.drawText(text, { ...o, ...place(o), size: o.size * fit });
+    else targetPage.drawLine({ ...o, start: place(o.start), end: place(o.end), thickness: o.thickness * fit });
+  });
+}
+
+async function exportCleanPDF() {
+  const PDFLib = await loadPDFLib();
+  const pdf = await PDFLib.PDFDocument.create();
+  const regular = await pdf.embedFont(PDFLib.StandardFonts.Helvetica);
+  const bold = await pdf.embedFont(PDFLib.StandardFonts.HelveticaBold);
+  const fonts = { regular, bold };
+  const colors = {
+    ink: PDFLib.rgb(0.10, 0.10, 0.10),
+    muted: PDFLib.rgb(0.36, 0.36, 0.34),
+    rule: PDFLib.rgb(0.82, 0.82, 0.80)
+  };
+  stages(invoice).forEach((stage) => {
+    const page = pdf.addPage([595.28, 841.89]);
+    drawPdfExportPage(page, invoice, stage, fonts, colors, PDFLib);
+  });
+  const bytes = await pdf.save();
+  const blobURL = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+  const link = document.createElement("a");
+  link.href = blobURL;
+  link.download = `${safeExportName()}.pdf`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(blobURL), 1000);
 }
 
 async function startExport() {
@@ -407,7 +555,7 @@ async function startExport() {
   setStatus("Preparing clean PDF…");
   try {
     await exportCleanPDF();
-    setStatus("PDF downloaded without browser headers or footers");
+    setStatus("Editable text PDF downloaded without browser headers or footers");
   } catch (error) {
     console.error(error);
     setStatus("Clean PDF unavailable. In the print dialog, turn off Headers and footers.");
