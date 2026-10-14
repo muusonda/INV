@@ -1,6 +1,6 @@
 :root {
   color-scheme: light;
-  --window: #f4f4f1;
+  --window: var(--paper);
   --paper: #f6f3e9;
   --quote-paper: #f2f4f5;
   --ink: #131313;
@@ -20,7 +20,7 @@ button, label.tool-button { cursor: pointer; }
 button:disabled { cursor: default; opacity: .42; }
 
 .app-shell { min-height: 100vh; display: flex; flex-direction: column; }
-.toolbar { display: flex; align-items: center; gap: 9px; min-height: 44px; padding: 0 14px; background: rgba(250, 250, 248, .96); border-bottom: 1px solid var(--soft-rule); position: sticky; top: 0; z-index: 10; }
+.toolbar { display: flex; align-items: center; gap: 9px; min-height: 44px; padding: 0 14px; background: var(--paper); border-bottom: 1px solid var(--soft-rule); position: sticky; top: 0; z-index: 10; }
 .tool-button { appearance: none; border: 0; background: transparent; color: var(--ink); display: inline-flex; align-items: center; gap: 5px; min-height: 30px; padding: 4px 5px; border-radius: 5px; font-size: 13px; }
 .tool-button:hover, .tool-button:focus-visible { background: rgba(0, 0, 0, .07); outline: none; }
 .toolbar-divider { width: 1px; height: 22px; background: var(--rule); margin: 0 3px; }
@@ -87,7 +87,7 @@ button:disabled { cursor: default; opacity: .42; }
 .reference-block { display: flex; flex-direction: column; gap: 4px; margin-top: 17px; }
 .reference-block strong { font-weight: 500; font-size: 13px; }
 
-.status-bar { display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 0 14px; border-top: 1px solid var(--soft-rule); background: rgba(250, 250, 248, .96); color: var(--ink); font-size: 11px; position: sticky; bottom: 0; z-index: 10; }
+.status-bar { display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 0 14px; border-top: 1px solid var(--soft-rule); background: var(--paper); color: var(--ink); font-size: 11px; position: sticky; bottom: 0; z-index: 10; }
 .status-icon { color: var(--green); font-size: 12px; }
 .status-icon.unsaved { color: #b26c00; }
 .status-spacer { flex: 1; }
