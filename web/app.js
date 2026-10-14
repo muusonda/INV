@@ -243,6 +243,7 @@ function renderLines() {
 
 function updateDerived() {
   const result = totals(invoice);
+  const isQuote = invoice.documentType === "QUOTE";
   $("subtotal-value").textContent = money(result.subtotal);
   $("tax-value").textContent = Number(invoice.taxRate) > 0 ? money(result.tax) : "N/A";
   $("total-value").textContent = money(result.total);
@@ -253,10 +254,11 @@ function updateDerived() {
   $("balance-value").textContent = money(Math.max(result.total - paid, 0));
   $("document-status").textContent = (invoice.status || "Draft").toUpperCase();
   $("toolbar-status").textContent = invoice.status || "Draft";
-  $("toolbar-type").textContent = invoice.documentType === "QUOTE" ? "Quote" : "Invoice";
+  $("toolbar-type").textContent = isQuote ? "Quote" : "Invoice";
   $("document-title").textContent = currentTitle();
-  $("terms-heading").textContent = invoice.documentType === "QUOTE" ? "QUOTE TERMS & ACCEPTANCE" : "PAYMENT TERMS";
-  $("invoice-document").classList.toggle("quote", invoice.documentType === "QUOTE");
+  $("terms-heading").textContent = isQuote ? "QUOTE TERMS & ACCEPTANCE" : "PAYMENT TERMS";
+  document.body.classList.toggle("quote-mode", isQuote);
+  $("invoice-document").classList.toggle("quote", isQuote);
   $("invoice-document").classList.toggle("is-half", invoice.paymentPlan === "50/50");
   $("payment-reference").textContent = invoice.documentNumber || "ASSIGNED ON ISSUE";
   $("issue-invoice").disabled = invoice.status !== "Draft";
@@ -1121,6 +1123,7 @@ function handleShortcuts(event) {
 }
 
 $("new-invoice").onclick = () => saveNewDocument("INVOICE");
+$("new-quote").onclick = () => saveNewDocument("QUOTE");
 $("documents-button").onclick = () => { renderDocuments(); openModal("documents-modal"); };
 $("save-invoice").onclick = saveInvoice;
 $("issue-invoice").onclick = issueInvoice;

@@ -2,7 +2,7 @@
   color-scheme: light;
   --window: var(--paper);
   --paper: #f6f3e9;
-  --quote-paper: #f2f4f5;
+  --quote-paper: #edf3f7;
   --ink: #131313;
   --muted: #5c5951;
   --rule: rgba(19, 19, 19, .18);
@@ -15,6 +15,14 @@
 * { box-sizing: border-box; }
 html, body { min-height: 100%; }
 body { margin: 0; background: var(--window); color: var(--ink); font-size: 13px; }
+body.quote-mode {
+  --window: #edf3f7;
+  --paper: #edf3f7;
+  --quote-paper: #edf3f7;
+  --muted: #566875;
+  --rule: rgba(38, 69, 86, .18);
+  --soft-rule: rgba(38, 69, 86, .11);
+}
 button, input, textarea, select { font: inherit; }
 button, label.tool-button { cursor: pointer; }
 button:disabled { cursor: default; opacity: .42; }
@@ -23,6 +31,7 @@ button:disabled { cursor: default; opacity: .42; }
 .toolbar { display: flex; align-items: center; gap: 9px; min-height: 44px; padding: 0 14px; background: var(--paper); border-bottom: 1px solid var(--soft-rule); position: sticky; top: 0; z-index: 10; }
 .tool-button { appearance: none; border: 0; background: transparent; color: var(--ink); display: inline-flex; align-items: center; gap: 5px; min-height: 30px; padding: 4px 5px; border-radius: 5px; font-size: 13px; }
 .tool-button:hover, .tool-button:focus-visible { background: rgba(0, 0, 0, .07); outline: none; }
+.quote-action { color: #365f78; }
 .toolbar-divider { width: 1px; height: 22px; background: var(--rule); margin: 0 3px; }
 .toolbar-spacer { flex: 1; }
 .toolbar-meta { color: var(--muted); font-size: 12px; font-weight: 600; }

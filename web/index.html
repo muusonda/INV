@@ -13,12 +13,13 @@
   <meta name="twitter:title" content="INV — Simple, private invoicing">
   <meta name="twitter:description" content="Create invoices in minutes. Turn uploaded invoices into editable drafts. No login. No subscription.">
   <title>INV — Simple, private invoicing</title>
-    <link rel="stylesheet" href="styles.css?v=103">
+    <link rel="stylesheet" href="styles.css?v=104">
 </head>
 <body>
   <div class="app-shell">
     <header class="toolbar" aria-label="Invoice actions">
       <button id="new-invoice" class="tool-button" title="New invoice">＋ <span>New</span></button>
+      <button id="new-quote" class="tool-button quote-action" title="New quote">◇ <span>Quote</span></button>
       <button id="documents-button" class="tool-button" title="Open documents">▤ <span>Documents</span></button>
       <label class="tool-button" for="import-file" title="Import invoice; OCR runs locally in your browser">⇩ <span>Import</span></label>
       <input id="import-file" type="file" accept=".pdf,.png,.jpg,.jpeg,.json,.txt,.csv,application/pdf,image/*,application/json,text/plain,text/csv" hidden>
@@ -140,6 +141,6 @@
   <!-- OCR is performed locally in the browser. Files are not sent to a server. -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="app.js?v=104"></script>
+  <script src="app.js?v=105"></script>
 </body>
 </html>
